@@ -938,6 +938,7 @@ class AutonomicZone(MediaPlayerDevice):
                     SUPPORT_VOLUME_MUTE     | \
                     SUPPORT_TURN_ON         | \
                     SUPPORT_TURN_OFF        | \
+                    SUPPORT_PLAY_MEDIA      | \
                     SUPPORT_SELECT_SOURCE
 
         return s
