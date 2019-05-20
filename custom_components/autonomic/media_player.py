@@ -649,7 +649,8 @@ class AutonomicZone(MediaPlayerDevice):
                 maxVolume = 80
             elif float(maxVolume) == 0:
                 maxVolume = 80
-            elif volume is None:
+
+            if volume is None:
                 volume = 0
 
             return float(volume) / float(maxVolume)
