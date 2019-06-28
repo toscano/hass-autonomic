@@ -940,7 +940,8 @@ class AutonomicZone(MediaPlayerDevice):
                     SUPPORT_TURN_ON         | \
                     SUPPORT_TURN_OFF        | \
                     SUPPORT_PLAY_MEDIA      | \
-                    SUPPORT_SELECT_SOURCE
+                    SUPPORT_SELECT_SOURCE   | \
+                    SUPPORT_CLEAR_PLAYLIST
 
         return s
 
@@ -1024,11 +1025,13 @@ class AutonomicZone(MediaPlayerDevice):
         self._parent.send('mrad.setzone "{}"'.format(self._zoneId))
         self._parent.send('mrad.setsource "{}"'.format(source))
 
-    """
     def clear_playlist(self):
         # Clear players playlist.
-        raise NotImplementedError()
+        self._parent.send('mrad.setzone "{}"'.format(self._zoneId))
+        self._parent.send('mrad.setsource')
+        self._parent.send('clearnowplaying false')
 
+    """
     def set_shuffle(self, shuffle):
         # Enable/disable shuffle mode.
         raise NotImplementedError()
