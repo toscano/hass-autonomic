@@ -266,20 +266,20 @@ class AutonomicStreamer:
 
                 workToDo = False
             except:
-                _LOGGER.info("Description request to %s failed... will try again in %d seconds.", url, connectHoldoff)
+                _LOGGER.warn("Description request to %s failed... will try again in %d seconds.", url, connectHoldoff)
                 yield from asyncio.sleep(connectHoldoff, loop=self._hass.loop)
 
         # Now open the socket
         workToDo = True
         while workToDo:
             try:
-                _LOGGER.debug("%s:Connecting to %s:%s", self.id, self.host, self._port)
+                _LOGGER.info("%s:Connecting to %s:%s", self.id, self.host, self._port)
 
                 reader, writer = yield from asyncio.open_connection(
                         self.host, self._port, loop=self._hass.loop)
                 workToDo = False
             except:
-                _LOGGER.info("%s:Connection to %s:%s failed... will try again in %d seconds.", self.id, self.host, self._port, RETRY_CONNECT_SECONDS)
+                _LOGGER.warn("%s:Connection to %s:%s failed... will try again in %d seconds.", self.id, self.host, self._port, RETRY_CONNECT_SECONDS)
                 yield from asyncio.sleep(RETRY_CONNECT_SECONDS, loop=self._hass.loop)
 
         # reset the pending commands
@@ -334,7 +334,7 @@ class AutonomicStreamer:
                     writer.close()
                     self._queue_future.cancel()
                     self._net_future.cancel()
-                    _LOGGER.debug("%s:IO loop exited for local close", self.id)
+                    _LOGGER.info("%s:IO loop exited for local close", self.id)
                     return
 
                 if self._net_future in done:
@@ -342,7 +342,8 @@ class AutonomicStreamer:
                     if reader.at_eof():
                         self._queue_future.cancel()
                         self._net_future.cancel()
-                        _LOGGER.debug("%s:IO loop exited for remote close", self.id)
+                        _LOGGER.info("%s:IO loop exited for remote close... will connect again in %d seconds.", self.id, RETRY_CONNECT_SECONDS)
+                        yield from asyncio.sleep(RETRY_CONNECT_SECONDS, loop=self._hass.loop)
                         # Schedule a re-connect...
                         self._hass.async_add_job(self._async_open())
                         return
@@ -401,10 +402,12 @@ class AutonomicStreamer:
 
         except Exception as e:
             _LOGGER.exception("_process_response ex with res=%s", res)
+            # some error occurred, re-connect may fix that
+            self.send('quit')
 
     def _process_zone_response(self, res):
         data = xmltodict.parse(res, force_list=('Zone',))
-        # TODO: There's a chance that the Zone count is zero... then that's gonna require a re-browse in a minute or so...
+        #  There's a chance that the Zone count is zero... That's handled as an exception/reconnect
         for zone in data['Zones']['Zone']:
             # <Zones total="5" start="1" more="false" art="false" alpha="false" displayAs="List">
             #    <Zone guid="00000001-5ace-e5da-ba88-8cf58dd178f2"
