@@ -58,14 +58,7 @@ ATTR_VERSION            = 'autonomic_version'
 TICK_THRESHOLD_SECONDS  = 5
 TICK_UPDATE_SECONDS     = 30
 
-
-
-SYNC_STATUS_INTERVAL = timedelta(minutes=5)
-UPDATE_CAPTURE_INTERVAL = timedelta(minutes=30)
-UPDATE_SERVICES_INTERVAL = timedelta(minutes=30)
-UPDATE_PRESETS_INTERVAL = timedelta(minutes=30)
-NODE_OFFLINE_CHECK_TIMEOUT = 180
-NODE_RETRY_INITIATION = timedelta(minutes=3)
+PING_INTERVAL           = timedelta(seconds=10)
 
 PLATFORM_SCHEMA = PLATFORM_SCHEMA.extend({
     vol.Optional(CONF_HOSTS): vol.All(cv.ensure_list, [{
@@ -195,6 +188,10 @@ class AutonomicStreamer:
         self._net_future = None
         self._zones = {}
         self._events = {}
+        self._last_inbound_data_utc = dt_util.utcnow()
+        self._sent_ping = 0
+
+        async_track_time_interval(self._hass, self._async_check_ping, PING_INTERVAL)
 
     @asyncio.coroutine
     def async_init(self):
@@ -219,6 +216,8 @@ class AutonomicStreamer:
         Connect to the server and start processing responses.
         """
         self.is_connected = False
+        self._last_inbound_data_utc = dt_util.utcnow()
+        self._sent_ping = 0
 
         # If we have any Zones... get them to update their state to OFFLINE
         for guid in self._zones:
@@ -302,6 +301,26 @@ class AutonomicStreamer:
         _LOGGER.info("%s:Connected to %s:%s", self.id, self.host, self._port)
         self.is_connected = True
 
+    @asyncio.coroutine
+    def _async_check_ping(self, now=None):
+        """Maybe send a ping."""
+        if (self.is_connected == False):
+            return
+
+        if (self._sent_ping > 2):
+            # Schedule a re-connect...
+            _LOGGER.error("%s:PING...reconnect needed.", self.id)
+            self.is_connected = False
+            self._hass.async_add_job(self._async_open())
+            return
+
+        if (self._last_inbound_data_utc + PING_INTERVAL + PING_INTERVAL < dt_util.utcnow() ):
+            self._sent_ping = self._sent_ping + 1
+            _LOGGER.debug("%s:PING...sending ping %d", self.id, self._sent_ping)
+            self.send("ping")
+        else:
+            self._sent_ping = 0
+            _LOGGER.debug("%s:PING...resetting ping %s",  self.id, self._last_inbound_data_utc)
 
     @asyncio.coroutine
     def _async_close(self):
@@ -342,13 +361,11 @@ class AutonomicStreamer:
                     if reader.at_eof():
                         self._queue_future.cancel()
                         self._net_future.cancel()
-                        _LOGGER.info("%s:IO loop exited for remote close... will connect again in %d seconds.", self.id, RETRY_CONNECT_SECONDS)
-                        yield from asyncio.sleep(RETRY_CONNECT_SECONDS, loop=self._hass.loop)
-                        # Schedule a re-connect...
-                        self._hass.async_add_job(self._async_open())
+                        _LOGGER.info("%s:IO loop exited for remote close...", self.id)
                         return
 
                     response = self._net_future.result()
+                    self._last_inbound_data_utc = dt_util.utcnow()
                     try:
                         self._process_response(response)
                     except:
@@ -383,13 +400,14 @@ class AutonomicStreamer:
             raise
 
     def send(self, cmd):
-        _LOGGER.info("%s:-->%s", self.id, cmd)
+        _LOGGER.debug("%s:-->%s", self.id, cmd)
         self._cmd_queue.put_nowait(cmd)
 
     def _process_response(self, res):
         try:
 
             s = str(res, 'utf-8').strip()
+            # _LOGGER.debug("%s:<--%s", self.id, s)
 
             if s.startswith('<Zones'):
                 self._process_zone_response(s)
