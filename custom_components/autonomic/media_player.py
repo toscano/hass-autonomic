@@ -287,6 +287,7 @@ class AutonomicStreamer:
         self._events = {}
 
         # Get the Zone structure
+        self.send('setclienttype hass')
         self.send('setxmlmode lists')
         self.send('mrad.browsezones')
         self.send('mrad.browsezonegroups')
@@ -307,18 +308,20 @@ class AutonomicStreamer:
         if (self.is_connected == False):
             return
 
-        if (self._sent_ping > 2):
-            # Schedule a re-connect...
-            _LOGGER.error("%s:PING...reconnect needed.", self.id)
-            self.is_connected = False
-            self._hass.async_add_job(self._async_open())
-            return
-
         if (self._last_inbound_data_utc + PING_INTERVAL + PING_INTERVAL < dt_util.utcnow() ):
+
+            if (self._sent_ping > 2):
+                # Schedule a re-connect...
+                _LOGGER.error("%s:PING...reconnect needed.", self.id)
+                self._sent_ping = 0
+                self.is_connected = False
+                self._hass.async_add_job(self._async_open())
+                return
+
             self._sent_ping = self._sent_ping + 1
             _LOGGER.debug("%s:PING...sending ping %d", self.id, self._sent_ping)
             self.send("ping")
-        else:
+        elif (self._sent_ping > 0):
             self._sent_ping = 0
             _LOGGER.debug("%s:PING...resetting ping %s",  self.id, self._last_inbound_data_utc)
 
