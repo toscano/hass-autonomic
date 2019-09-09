@@ -1041,6 +1041,8 @@ class AutonomicZone(MediaPlayerDevice):
             self._parent.send('recallscene "{}"'.format(media_id))
         elif media_type == "preset":
             self._parent.send('recallpreset "{}"'.format(media_id))
+        elif media_type == "radioStation":
+            self._parent.send('playradiostation "{}"'.format(media_id))
         else:
             _LOGGER.error("Unexpected media_type='%s'.", media_type)
 
