@@ -317,13 +317,14 @@ class AutonomicStreamer:
                 self.is_connected = False
                 self._hass.async_add_job(self._async_open())
                 return
-
             self._sent_ping = self._sent_ping + 1
-            _LOGGER.debug("%s:PING...sending ping %d", self.id, self._sent_ping)
+            if (self._sent_ping > 1):
+                _LOGGER.debug("%s:PING...sending ping %d", self.id, self._sent_ping)
             self.send("ping")
         elif (self._sent_ping > 0):
+            if (self._sent_ping > 1):
+                _LOGGER.debug("%s:PING...resetting ping %s",  self.id, self._last_inbound_data_utc)
             self._sent_ping = 0
-            _LOGGER.debug("%s:PING...resetting ping %s",  self.id, self._last_inbound_data_utc)
 
     @asyncio.coroutine
     def _async_close(self):
