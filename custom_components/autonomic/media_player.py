@@ -4,7 +4,6 @@ For more details about this platform, please refer to the documentation at
 https://home-assistant.io/components/media_player.autonomic/
 """
 import asyncio
-from asyncio.futures import CancelledError
 
 import sys
 from distutils.version import LooseVersion
