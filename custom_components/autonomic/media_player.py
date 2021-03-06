@@ -20,7 +20,7 @@ import xmltodict
 
 from homeassistant.components.media_player import (
     ATTR_TO_PROPERTY, DOMAIN, PLATFORM_SCHEMA,
-    MediaPlayerDevice)
+    MediaPlayerEntity)
 from homeassistant.components.media_player.const import (
     MEDIA_TYPE_MUSIC, SUPPORT_CLEAR_PLAYLIST, SUPPORT_NEXT_TRACK, SUPPORT_PAUSE,
     SUPPORT_PREVIOUS_TRACK, SUPPORT_SEEK, SUPPORT_SELECT_SOURCE, SUPPORT_STOP, SUPPORT_SHUFFLE_SET,
@@ -596,7 +596,7 @@ class AutonomicStreamer:
         key = '{}.{}'.format(entityId, eventName)
         return self._events.pop(key, None)
 
-class AutonomicZone(MediaPlayerDevice):
+class AutonomicZone(MediaPlayerEntity):
     # Representation of an Autonomic Zone
 
     def __init__(self, parent, hass, guid, name, zoneId, sourceId):
