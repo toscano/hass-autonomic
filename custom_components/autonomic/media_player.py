@@ -1035,13 +1035,15 @@ class AutonomicZone(MediaPlayerEntity):
         self._parent.send('mrad.setzone "{}"'.format(self._zoneId))
         self._parent.send('mrad.setsource')
 
+        media_type = media_type.lower()
+
         if media_type == "music":
             self._parent.send('duckplay "{}"'.format(media_id))
         elif media_type == "scene":
             self._parent.send('recallscene "{}"'.format(media_id))
         elif media_type == "preset":
             self._parent.send('recallpreset "{}"'.format(media_id))
-        elif media_type == "radioStation":
+        elif media_type == "radiostation":
             self._parent.send('playradiostation "{}"'.format(media_id))
         else:
             _LOGGER.error("Unexpected media_type='%s'.", media_type)
