@@ -230,7 +230,7 @@ class AutonomicStreamer:
             try:
                 websession = async_get_clientsession(self._hass)
                 url = "http://{}:5005/upnp/DevDesc/0.xml".format(self.host)
-                with async_timeout.timeout(10, loop=self._hass.loop):
+                with async_timeout.timeout(10):
                         response = yield from websession.get(url)
 
                 body = yield from response.text()
