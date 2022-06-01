@@ -18,6 +18,8 @@ import async_timeout
 import voluptuous as vol
 import xmltodict
 
+from homeassistant.components import media_source, spotify
+
 from homeassistant.components.media_player import (
     ATTR_TO_PROPERTY,
     DOMAIN,
@@ -615,6 +617,7 @@ class AutonomicZone(MediaPlayerEntity):
 
     def __init__(self, parent, hass, guid, name, zoneId, sourceId):
         self._parent        = parent
+        self._hass          = hass
         self._guid          = guid
         self._name          = name
         self._zoneId        = zoneId
@@ -1050,6 +1053,19 @@ class AutonomicZone(MediaPlayerEntity):
         self._parent.send('mrad.setsource')
 
         media_type = media_type.lower()
+
+        if media_source.is_media_source_id(media_id):
+            media_type = "music"
+            media_id = (
+                asyncio.run_coroutine_threadsafe(
+                    media_source.async_resolve_media(
+                        self._hass, media_id, self.entity_id
+                    ),
+                    self._hass.loop,
+                )
+                .result()
+                .url
+            )
 
         if media_type == "music":
             self._parent.send('duckplay "{}"'.format(media_id))
