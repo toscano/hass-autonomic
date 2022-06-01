@@ -19,16 +19,30 @@ import voluptuous as vol
 import xmltodict
 
 from homeassistant.components.media_player import (
-    ATTR_TO_PROPERTY, DOMAIN, PLATFORM_SCHEMA,
-    MediaPlayerEntity)
+    ATTR_TO_PROPERTY,
+    DOMAIN,
+    PLATFORM_SCHEMA,
+    MediaPlayerEntity
+)
 from homeassistant.components.media_player.const import (
-    MEDIA_TYPE_MUSIC, SUPPORT_CLEAR_PLAYLIST, SUPPORT_NEXT_TRACK, SUPPORT_PAUSE,
-    SUPPORT_PREVIOUS_TRACK, SUPPORT_SEEK, SUPPORT_SELECT_SOURCE, SUPPORT_STOP, SUPPORT_SHUFFLE_SET,
-    SUPPORT_VOLUME_MUTE, SUPPORT_VOLUME_SET, SUPPORT_VOLUME_STEP, SUPPORT_TURN_OFF, SUPPORT_TURN_ON,
-    SUPPORT_PLAY, SUPPORT_PLAY_MEDIA)
+    MEDIA_TYPE_MUSIC,
+    MediaPlayerEntityFeature
+)
 from homeassistant.const import (
-    ATTR_ENTITY_ID, CONF_HOST, CONF_HOSTS, CONF_NAME, CONF_PORT, EVENT_HOMEASSISTANT_START,
-    EVENT_HOMEASSISTANT_STOP, STATE_IDLE, STATE_PAUSED, STATE_OFF, STATE_ON, STATE_PLAYING, STATE_UNKNOWN)
+    ATTR_ENTITY_ID,
+    CONF_HOST,
+    CONF_HOSTS,
+    CONF_NAME,
+    CONF_PORT,
+    EVENT_HOMEASSISTANT_START,
+    EVENT_HOMEASSISTANT_STOP,
+    STATE_IDLE,
+    STATE_PAUSED,
+    STATE_OFF,
+    STATE_ON,
+    STATE_PLAYING,
+    STATE_UNKNOWN
+)
 from homeassistant.core import callback
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 import homeassistant.helpers.config_validation as cv
@@ -941,31 +955,31 @@ class AutonomicZone(MediaPlayerEntity):
 
             if smartSource:
 
-                s = SUPPORT_VOLUME_STEP     | \
-                    SUPPORT_VOLUME_SET      | \
-                    SUPPORT_VOLUME_MUTE     | \
-                    SUPPORT_TURN_ON         | \
-                    SUPPORT_TURN_OFF        | \
-                    SUPPORT_PLAY_MEDIA      | \
-                    SUPPORT_SELECT_SOURCE   | \
-                    SUPPORT_PAUSE           | \
-                    SUPPORT_SEEK            | \
-                    SUPPORT_PREVIOUS_TRACK  | \
-                    SUPPORT_NEXT_TRACK      | \
-                    SUPPORT_STOP            | \
-                    SUPPORT_CLEAR_PLAYLIST  | \
-                    SUPPORT_PLAY            | \
-                    SUPPORT_SHUFFLE_SET
+                s = MediaPlayerEntityFeature.VOLUME_STEP     | \
+                    MediaPlayerEntityFeature.VOLUME_SET      | \
+                    MediaPlayerEntityFeature.VOLUME_MUTE     | \
+                    MediaPlayerEntityFeature.TURN_ON         | \
+                    MediaPlayerEntityFeature.TURN_OFF        | \
+                    MediaPlayerEntityFeature.PLAY_MEDIA      | \
+                    MediaPlayerEntityFeature.SELECT_SOURCE   | \
+                    MediaPlayerEntityFeature.PAUSE           | \
+                    MediaPlayerEntityFeature.SEEK            | \
+                    MediaPlayerEntityFeature.PREVIOUS_TRACK  | \
+                    MediaPlayerEntityFeature.NEXT_TRACK      | \
+                    MediaPlayerEntityFeature.STOP            | \
+                    MediaPlayerEntityFeature.CLEAR_PLAYLIST  | \
+                    MediaPlayerEntityFeature.PLAY            | \
+                    MediaPlayerEntityFeature.SHUFFLE_SET
             else:
 
-                s = SUPPORT_VOLUME_STEP     | \
-                    SUPPORT_VOLUME_SET      | \
-                    SUPPORT_VOLUME_MUTE     | \
-                    SUPPORT_TURN_ON         | \
-                    SUPPORT_TURN_OFF        | \
-                    SUPPORT_PLAY_MEDIA      | \
-                    SUPPORT_SELECT_SOURCE   | \
-                    SUPPORT_CLEAR_PLAYLIST
+                s = MediaPlayerEntityFeature.VOLUME_STEP     | \
+                    MediaPlayerEntityFeature.VOLUME_SET      | \
+                    MediaPlayerEntityFeature.VOLUME_MUTE     | \
+                    MediaPlayerEntityFeature.TURN_ON         | \
+                    MediaPlayerEntityFeature.TURN_OFF        | \
+                    MediaPlayerEntityFeature.PLAY_MEDIA      | \
+                    MediaPlayerEntityFeature.SELECT_SOURCE   | \
+                    MediaPlayerEntityFeature.CLEAR_PLAYLIST
 
         return s
 
