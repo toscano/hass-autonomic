@@ -1,7 +1,7 @@
 """
-Support for Autonomic devices.
-For more details about this platform, please refer to the documentation at
-https://home-assistant.io/components/media_player.autonomic/
+Support for Autonomic e-Series devices.
+For more information visit
+https://github.com/toscano/hass-autonomic
 """
 import asyncio
 
