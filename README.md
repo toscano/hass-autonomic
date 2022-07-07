@@ -1,5 +1,7 @@
 # Autonomic e-Series integration for Home Assistant
 
+NOTE: This integration **REQUIRES** [Home Assistant](https://www.home-assistant.io/) version `2022.7.0` or greater.
+
 Provides support for controlling Autonomic Controls e-Series media systems (Media players paired with Amps) through Home Assistant. Requires Autonomic e-Series servers running firmware `6.1.20180215.0` or greater.
 
 Currently Supports:
