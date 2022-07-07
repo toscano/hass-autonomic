@@ -24,7 +24,8 @@ from homeassistant.components.media_player import (
     ATTR_TO_PROPERTY,
     DOMAIN,
     PLATFORM_SCHEMA,
-    MediaPlayerEntity
+    MediaPlayerEntity,
+    async_process_play_media_url
 )
 from homeassistant.components.media_player.const import (
     MEDIA_TYPE_MUSIC,
@@ -1059,6 +1060,7 @@ class AutonomicZone(MediaPlayerEntity):
                 .result()
                 .url
             )
+            media_id = async_process_play_media_url(self.hass, media_id)
 
         if media_type == "music":
             self._parent.send('duckplay "{}"'.format(media_id))
