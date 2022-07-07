@@ -281,7 +281,7 @@ class AutonomicStreamer:
                 workToDo = False
             except:
                 _LOGGER.warn("Description request to %s failed... will try again in %d seconds.", url, connectHoldoff)
-                yield from asyncio.sleep(connectHoldoff, loop=self._hass.loop)
+                yield from asyncio.sleep(connectHoldoff)
 
         # Now open the socket
         workToDo = True
@@ -289,15 +289,14 @@ class AutonomicStreamer:
             try:
                 _LOGGER.info("%s:Connecting to %s:%s", self.id, self.host, self._port)
 
-                reader, writer = yield from asyncio.open_connection(
-                        self.host, self._port, loop=self._hass.loop)
+                reader, writer = yield from asyncio.open_connection(self.host, self._port)
                 workToDo = False
             except:
                 _LOGGER.warn("%s:Connection to %s:%s failed... will try again in %d seconds.", self.id, self.host, self._port, RETRY_CONNECT_SECONDS)
-                yield from asyncio.sleep(RETRY_CONNECT_SECONDS, loop=self._hass.loop)
+                yield from asyncio.sleep(RETRY_CONNECT_SECONDS)
 
         # reset the pending commands
-        self._cmd_queue = asyncio.Queue(loop=self._hass.loop)
+        self._cmd_queue = asyncio.Queue()
 
         self._events = {}
 
@@ -311,8 +310,7 @@ class AutonomicStreamer:
         self.send('mrad.subscribeevents source')
         self.send('mrad.getstatus')
 
-        self._ioloop_future = asyncio.ensure_future(
-                self._ioloop(reader, writer), loop=self._hass.loop)
+        self._ioloop_future = asyncio.ensure_future(self._ioloop(reader, writer))
 
         _LOGGER.info("%s:Connected to %s:%s", self.id, self.host, self._port)
         self.is_connected = True
@@ -353,11 +351,9 @@ class AutonomicStreamer:
     @asyncio.coroutine
     def _ioloop(self, reader, writer):
 
-        self._queue_future = asyncio.ensure_future(
-                self._cmd_queue.get(), loop=self._hass.loop)
+        self._queue_future = asyncio.ensure_future(self._cmd_queue.get())
 
-        self._net_future = asyncio.ensure_future(
-                reader.readline(), loop=self._hass.loop)
+        self._net_future = asyncio.ensure_future(reader.readline())
 
         try:
 
@@ -365,8 +361,7 @@ class AutonomicStreamer:
 
                 done, pending = yield from asyncio.wait(
                         [self._queue_future, self._net_future],
-                        return_when=asyncio.FIRST_COMPLETED,
-                        loop=self._hass.loop)
+                        return_when=asyncio.FIRST_COMPLETED)
 
                 if self._closing:
                     writer.close()
@@ -390,8 +385,7 @@ class AutonomicStreamer:
                     except:
                         pass
 
-                    self._net_future = asyncio.ensure_future(
-                            reader.readline(), loop=self._hass.loop)
+                    self._net_future = asyncio.ensure_future(reader.readline())
 
                 if self._queue_future in done:
                     cmd = self._queue_future.result()
@@ -400,8 +394,7 @@ class AutonomicStreamer:
                     writer.write(bytearray(cmd, 'utf-8'))
                     yield from writer.drain()
 
-                    self._queue_future = asyncio.ensure_future(
-                            self._cmd_queue.get(), loop=self._hass.loop)
+                    self._queue_future = asyncio.ensure_future(self._cmd_queue.get())
 
             _LOGGER.debug("%s:IO loop exited", self.id)
 
