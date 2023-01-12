@@ -35,7 +35,7 @@ from homeassistant.const import (
     ATTR_ENTITY_ID,
     CONF_HOST,
     CONF_HOSTS,
-    CONF_NAME,
+    CONF_MODE,
     CONF_PORT,
     EVENT_HOMEASSISTANT_START,
     EVENT_HOMEASSISTANT_STOP,
@@ -59,6 +59,9 @@ _LOGGER = logging.getLogger(__name__)
 
 
 DATA_AUTONOMIC          = 'autonomic'
+MODE_MRAD               = 'mrad'
+MODE_STANDALONE         = 'standalone'
+DEFAULT_MODE            = MODE_MRAD
 DEFAULT_PORT            = 5004
 MIN_VERSION_REQUIRED    =  '6.1.20180215.0'
 RETRY_CONNECT_SECONDS   = 30
@@ -80,7 +83,7 @@ PLATFORM_SCHEMA = PLATFORM_SCHEMA.extend({
     vol.Optional(CONF_HOSTS): vol.All(cv.ensure_list, [{
         vol.Required(CONF_HOST): cv.string,
         vol.Optional(CONF_PORT, default=DEFAULT_PORT): cv.port,
-        vol.Optional(CONF_NAME): cv.string,
+        vol.Optional(CONF_MODE, default=DEFAULT_MODE): cv.string,
     }])
 })
 
@@ -96,7 +99,7 @@ SERVICE_TO_METHOD = {
 
 
 
-def _add_autonomic_host(hass, async_add_devices, host, port=None, name=None, fromConfig=False):
+def _add_autonomic_host(hass, async_add_devices, host, port=None, mode=None, fromConfig=False):
 
     """Add Autonomic host."""
     if host in [x.host for x in hass.data[DATA_AUTONOMIC]]:
@@ -130,7 +133,7 @@ def _add_autonomic_host(hass, async_add_devices, host, port=None, name=None, fro
             hass.bus.async_listen_once( EVENT_HOMEASSISTANT_START, _start)
 
     hass.bus.async_listen_once(EVENT_HOMEASSISTANT_STOP, _shutting_down)
-    streamer = AutonomicStreamer(hass, host, port, name, async_add_devices, _init_complete_cb)
+    streamer = AutonomicStreamer(hass, host, port, mode, async_add_devices, _init_complete_cb)
     hass.data[DATA_AUTONOMIC].append(streamer)
 
     if hass.is_running:
@@ -160,7 +163,7 @@ def async_setup_platform(hass, config, async_add_devices, discovery_info=None):
                                 , async_add_devices
                                 , host.get(CONF_HOST)
                                 , host.get(CONF_PORT)
-                                , host.get(CONF_NAME)
+                                , host.get(CONF_MODE).lower()
                                 , True)
 
     @asyncio.coroutine
@@ -187,12 +190,13 @@ def async_setup_platform(hass, config, async_add_devices, discovery_info=None):
 
 
 class AutonomicStreamer:
-    def __init__(self, hass, host, port=None, name=None, async_add_devices=None, init_callback=None):
+    def __init__(self, hass, host, port=None, mode=None, async_add_devices=None, init_callback=None):
         """Initialize the data channel to this device"""
         self._hass = hass
         self.host = host
         self._port = port
-        self._name = name
+        self._mode = mode
+        self._name = None
         self.is_connected = False
 
         self._async_add_devices = async_add_devices
@@ -438,6 +442,10 @@ class AutonomicStreamer:
 
     def _process_zone_response(self, res):
         data = xmltodict.parse(res, force_list=('Zone',))
+
+        if data['Zones']['@total'] == '0':
+             _LOGGER.warn("%s:Total Zones=%s with mode=%s. Should you be using mode=%s ?", self.id, data['Zones']['@total'], self._mode, MODE_STANDALONE)
+
         #  There's a chance that the Zone count is zero... That's handled as an exception/reconnect
         for zone in data['Zones']['Zone']:
             # <Zones total="5" start="1" more="false" art="false" alpha="false" displayAs="List">
