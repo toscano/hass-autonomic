@@ -219,13 +219,13 @@ class AutonomicStreamer:
 
     def start(self):
         """Let's connect and get some info from this server..."""
-        _LOGGER.debug("start %s", self.host)
+        _LOGGER.debug("%s:start %s with mode=%s", self.host, self.host, self._mode)
         self._hass.async_add_job(self._async_open())
 
     @asyncio.coroutine
     def async_stop(self):
         """Stop - Like a destructor."""
-        _LOGGER.debug("stop %s", self.host)
+        _LOGGER.debug("%s:stop %s", self.host, self.host)
         self._closing = True
         self._queue_future.cancel()
         self.is_connected = False
@@ -255,7 +255,7 @@ class AutonomicStreamer:
                         response = yield from websession.get(url)
 
                 body = yield from response.text()
-                _LOGGER.debug(body)
+                #_LOGGER.debug(body)
 
                 data = xmltodict.parse(body)
 
@@ -285,7 +285,7 @@ class AutonomicStreamer:
 
                 workToDo = False
             except:
-                _LOGGER.warn("Description request to %s failed... will try again in %d seconds.", url, connectHoldoff)
+                _LOGGER.warn("%s:Description request to %s failed... will try again in %d seconds.", self.host, url, connectHoldoff)
                 yield from asyncio.sleep(connectHoldoff)
 
         # Now open the socket
@@ -394,7 +394,7 @@ class AutonomicStreamer:
 
                 if self._queue_future in done:
                     cmd = self._queue_future.result()
-                    #_LOGGER.info("--> %s", cmd)
+                    #_LOGGER.info("%s:--> %s", self.host, cmd)
                     cmd += '\r'
                     writer.write(bytearray(cmd, 'utf-8'))
                     yield from writer.drain()
@@ -424,7 +424,7 @@ class AutonomicStreamer:
         try:
 
             s = str(res, 'utf-8').strip()
-            # _LOGGER.debug("%s:<--%s", self.id, s)
+            # _LOGGER.debug("%s:<--%s", self.host, s)
 
             if s.startswith('<Zones'):
                 self._process_zone_response(s)
@@ -436,7 +436,7 @@ class AutonomicStreamer:
             return s
 
         except Exception as e:
-            _LOGGER.exception("_process_response ex with res=%s", res)
+            _LOGGER.exception("%s:_process_response ex with res=%s", self.host, res)
             # some error occurred, re-connect may fix that
             self.send('quit')
 
@@ -1079,7 +1079,7 @@ class AutonomicZone(MediaPlayerEntity):
         elif media_type == "radiostation":
             self._parent.send('playradiostation "{}"'.format(media_id))
         else:
-            _LOGGER.error("Unexpected media_type='%s'.", media_type)
+            _LOGGER.error("play_media:Unexpected media_type='%s'.", media_type)
 
     def select_source(self, source):
         # Select input source.
