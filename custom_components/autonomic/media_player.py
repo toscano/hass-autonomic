@@ -73,6 +73,7 @@ SERVICE_ALL_OFF         = 'autonomic_all_off'
 ATTR_SYSTEM_ID          = 'autonomic_system_id'
 ATTR_PLATFORM           = 'platform'
 ATTR_VERSION            = 'autonomic_version'
+ATTR_MODE               = 'mode'
 
 TICK_THRESHOLD_SECONDS  = 5
 TICK_UPDATE_SECONDS     = 30
@@ -308,12 +309,20 @@ class AutonomicStreamer:
         # Get the Zone structure
         self.send('setclienttype hass')
         self.send('setxmlmode lists')
-        self.send('mrad.browsezones')
-        self.send('mrad.browsezonegroups')
 
-        # Subscribe and catchup
-        self.send('mrad.subscribeevents source')
-        self.send('mrad.getstatus')
+        if self._mode == MODE_STANDALONE:
+            self.send('browseinstances')
+
+            # Subscribe and catchup
+            self.send('subscribeevents')
+            self.send('getstatus')
+        else:
+            self.send('mrad.browsezones')
+            self.send('mrad.browsezonegroups')
+
+            # Subscribe and catchup
+            self.send('mrad.subscribeevents source')
+            self.send('mrad.getstatus')
 
         self._ioloop_future = asyncio.ensure_future(self._ioloop(reader, writer))
 
@@ -427,11 +436,17 @@ class AutonomicStreamer:
             # _LOGGER.debug("%s:<--%s", self.host, s)
 
             if s.startswith('<Zones'):
-                self._process_zone_response(s)
+                self._process_mrad_zone_response(s)
             elif s.startswith('<ZoneGroups'):
-                self._process_zonegroup_response(s)
+                self._process_mrad_zonegroup_response(s)
             elif s.startswith('MRAD.'):
-                self._process_event(s)
+                self._process_mrad_event(s)
+            elif s.startswith('<Instances'):
+                self._process_standalone_instance_response(s)
+            elif s.startswith('ReportState') or s.startswith('StateChanged'):
+                self._process_standalone_event(s)
+            #else:
+            #    _LOGGER.info("%s:unprocessed<--%s", self.host, s)
 
             return s
 
@@ -440,7 +455,105 @@ class AutonomicStreamer:
             # some error occurred, re-connect may fix that
             self.send('quit')
 
-    def _process_zone_response(self, res):
+    def _process_standalone_instance_response(self, res):
+        data = xmltodict.parse(res, force_list=('Instance',))
+
+        if data['Instances']['@total'] == '0':
+             _LOGGER.warn("%s:Total Instances=%s with mode=%s.", self.id, data['Instances']['@total'], self._mode)
+
+        #  There's a chance that the Zone count is zero... That's handled as an exception/reconnect
+        for instance in data['Instances']['Instance']:
+            # <Instances total="1" start="1" more="false" art="false" alpha="false" displayAs="List">
+            #    <Instance  name="Player_A"
+            #               friendlyName="Player A"
+            #               fqn="Player_A@D46A9160066E"
+            #               dna="name"
+            #               supports="MrledvpScbF"
+            #               m1="Pandora: Diana Krall Radio"
+            #               m2="Emilie-Claire Barlow"
+            #               m3="Seule Ce Soir"
+            #               m4="Seule Ce Soir"
+            #               mArt="http://192.168.1.80:5005/GetArt?instance=Player_A@D46A9160066E&amp;ticks=638091505856194880&amp;guid={ab4bad9c-6f12-4a61-7466-85832dbc940c}"
+            #               gainMode="Fixed" />
+            # </Instances>
+            guid    = instance['@fqn']
+            sourceId= instance['@name']
+
+            m1      = instance['@m1']
+            self._events['{}.MetaData1'.format(sourceId)]=m1
+            m2      = instance['@m2']
+            self._events['{}.MetaData2'.format(sourceId)]=m2
+            m3      = instance['@m3']
+            self._events['{}.MetaData3'.format(sourceId)]=m3
+            m4      = instance['@m4']
+            self._events['{}.MetaData4'.format(sourceId)]=m4
+            mArt    = instance['@mArt']
+            self._events['{}.mArt'.format(sourceId) ]=mArt
+
+            if guid in self._zones:
+                found           = self._zones[guid]
+                found.schedule_update_ha_state()
+            else:
+                name    = instance['@friendlyName']
+                id      = instance['@name']
+
+                _LOGGER.info("%s:ADDING ZONE: %s %s", self.id, id, name)
+                zone = AutonomicZone(self, self._hass, guid, name, id, sourceId)
+                self._zones[guid] = zone
+                self._async_add_devices([zone])
+
+    def _process_standalone_event(self, res):
+        # Parse...
+        # StateChanged Player_A TrackTime=263
+        splits = res.split(' ')
+        nv = splits[2].split('=')
+        name = nv[0]
+        pEq = res.find('=')
+        entityId = splits[1]
+
+        key = '{}.{}'.format(entityId, name)
+        value = res[pEq+1:]
+
+        # Update our object for the first few TrackTime events
+        # then only once every TICK_UPDATE_SECONDS
+        if name == 'TrackTime':
+            value = value.replace("00:00:00", "0")
+            if key in self._events:
+                if int(value) > TICK_THRESHOLD_SECONDS:
+                    if int(value) % TICK_UPDATE_SECONDS != 0:
+                        return
+
+        self._events[key]=value
+
+        # Manufacture TrackTimeUtc and since TrackTime
+        # only occurs for SmartSources manufacture that too...
+        if name == 'TrackTime':
+            name = 'TrackTimeUtc'
+            key = '{}.{}'.format(entityId, name)
+            value = dt_util.utcnow()
+            self._events[key]=value
+
+            name = 'SmartSource'
+            key = '{}.{}'.format(entityId, name)
+            value = True
+            self._events[key]=value
+
+        # Shortcut to better art
+        if name == 'MediaArtChanged':
+            self.send('browseinstances')
+            return
+
+        # Schedule an update for the associated Zone(s)
+        for guid in self._zones:
+            zone = self._zones[guid]
+            if zone._zoneId == entityId:
+                zone.schedule_update_ha_state()
+            elif zone._sourceId == entityId:
+                zone.schedule_update_ha_state()
+
+
+
+    def _process_mrad_zone_response(self, res):
         data = xmltodict.parse(res, force_list=('Zone',))
 
         if data['Zones']['@total'] == '0':
@@ -484,7 +597,7 @@ class AutonomicStreamer:
                 self._zones[guid] = zone
                 self._async_add_devices([zone])
 
-    def _process_zonegroup_response(self, res):
+    def _process_mrad_zonegroup_response(self, res):
         # This is a kludge that allows us to process <vol> and <src> zones as one element
         res = res.replace("</vol>", "")
         res = res.replace("<src>", "")
@@ -559,7 +672,7 @@ class AutonomicStreamer:
                     found = self._zones[guid]
                     found.set_source_id( sourceId )
 
-    def _process_event(self, res):
+    def _process_mrad_event(self, res):
         # Parse...
         # MRAD.ReportState Zone_1 ZoneGain=0
         splits = res.split(' ')
@@ -659,7 +772,10 @@ class AutonomicZone(MediaPlayerEntity):
     def state(self):
         # State of the player.
         if self._parent.is_connected:
-            power = self._parent.get_event(self._zoneId, 'PowerOn')
+            if self._parent._mode == MODE_MRAD:
+                power = self._parent.get_event(self._zoneId, 'PowerOn')
+            else:
+                power = 'True' # since MODE_STANDALONE zones (aka instances) are ALWAYS ON
 
             if power is None:
                 return STATE_UNKNOWN
@@ -685,8 +801,19 @@ class AutonomicZone(MediaPlayerEntity):
     def volume_level(self):
         # Volume level of the media player (0..1).
         if self._parent.is_connected:
-            maxVolume = self._parent.get_event(self._zoneId, 'MaxVolume')
-            volume = self._parent.get_event(self._zoneId, 'Volume')
+            if self._parent._mode == MODE_MRAD:
+                maxVolume = self._parent.get_event(self._zoneId, 'MaxVolume')
+                volume = self._parent.get_event(self._zoneId, 'Volume')
+            else:
+                maxVolume = 50
+                gainMode = self._parent.get_event(self._zoneId, 'GainMode')
+                if gainMode is None:
+                    volume = 50
+                elif gainMode == 'Fixed':
+                    volume = 50
+                else:
+                    volume = self._parent.get_event(self._zoneId, 'Volume')
+
 
             if maxVolume is None:
                 maxVolume = 80
@@ -968,13 +1095,32 @@ class AutonomicZone(MediaPlayerEntity):
                     MediaPlayerEntityFeature.PLAY_MEDIA      | \
                     MediaPlayerEntityFeature.SELECT_SOURCE   | \
                     MediaPlayerEntityFeature.PAUSE           | \
-                    MediaPlayerEntityFeature.SEEK            | \
-                    MediaPlayerEntityFeature.PREVIOUS_TRACK  | \
-                    MediaPlayerEntityFeature.NEXT_TRACK      | \
                     MediaPlayerEntityFeature.STOP            | \
                     MediaPlayerEntityFeature.CLEAR_PLAYLIST  | \
-                    MediaPlayerEntityFeature.PLAY            | \
-                    MediaPlayerEntityFeature.SHUFFLE_SET
+                    MediaPlayerEntityFeature.PLAY
+
+                #ReportState Player_A SkipNextAvailable=True
+                b = self._parent.get_event(self._sourceId, 'SkipNextAvailable')
+                if b is not None and b.find('T')==0:
+                    s = s | MediaPlayerEntityFeature.NEXT_TRACK
+
+                #ReportState Player_A SkipPrevAvailable=True
+                b = self._parent.get_event(self._sourceId, 'SkipPrevAvailable')
+                if b is not None and b.find('T')==0:
+                    s = s | MediaPlayerEntityFeature.PREVIOUS_TRACK
+
+                #ReportState Player_A ShuffleAvailable=True
+                b = self._parent.get_event(self._sourceId, 'ShuffleAvailable')
+                if b is not None and b.find('T')==0:
+                    s = s |  MediaPlayerEntityFeature.SHUFFLE_SET
+
+                #ReportState Player_A SeekAvailable=True
+                b = self._parent.get_event(self._sourceId, 'SeekAvailable')
+                if b is not None and b.find('T')==0:
+                    s = s |  MediaPlayerEntityFeature.SEEK
+
+                #ReportState Player_A RepeatAvailable=True
+                #ReportState Player_A PlayPauseAvailable=True
             else:
 
                 s = MediaPlayerEntityFeature.VOLUME_STEP     | \
@@ -986,26 +1132,43 @@ class AutonomicZone(MediaPlayerEntity):
                     MediaPlayerEntityFeature.SELECT_SOURCE   | \
                     MediaPlayerEntityFeature.CLEAR_PLAYLIST
 
+            if self._parent._mode == MODE_STANDALONE:
+                s = s & ~MediaPlayerEntityFeature.TURN_ON & ~MediaPlayerEntityFeature.TURN_OFF & ~MediaPlayerEntityFeature.SELECT_SOURCE
+
+                gainMode = self._parent.get_event(self._zoneId, 'GainMode')
+                if gainMode is not None and gainMode == 'Fixed':
+                    s = s & ~MediaPlayerEntityFeature.VOLUME_SET & ~MediaPlayerEntityFeature.VOLUME_STEP
+
         return s
 
     def turn_on(self):
         # Turn the media player on.
-        self._parent.send('mrad.power on "{}"'.format(self._zoneId))
+        if self._parent._mode == MODE_MRAD:
+            self._parent.send('mrad.power on "{}"'.format(self._zoneId))
 
     def turn_off(self):
         # Turn the media player off.
-        self._parent.send('mrad.power off "{}"'.format(self._zoneId))
+        if self._parent._mode == MODE_MRAD:
+            self._parent.send('mrad.power off "{}"'.format(self._zoneId))
 
     def mute_volume(self, mute):
         # Mute the volume.
-        self._parent.send('mrad.setzone "{}"'.format(self._zoneId))
-        if mute:
-            self._parent.send('mrad.mute on')
+        if self._parent._mode == MODE_MRAD:
+            self._parent.send('mrad.setzone "{}"'.format(self._zoneId))
+            if mute:
+                self._parent.send('mrad.mute on')
+            else:
+                self._parent.send('mrad.mute off')
         else:
-            self._parent.send('mrad.mute off')
+            self._parent.send('setInstance "{}"'.format(self._sourceId))
+            if mute:
+                self._parent.send('mute on')
+            else:
+                self._parent.send('mute off')
 
     def set_volume_level(self, volume):
         # Set volume level, range 0..1.
+        if self._parent._mode == MODE_MRAD:
             maxVolume = self._parent.get_event(self._zoneId, 'MaxVolume')
 
             if maxVolume is None:
@@ -1014,36 +1177,63 @@ class AutonomicZone(MediaPlayerEntity):
             volume = int( float(volume) * float(maxVolume) )
             self._parent.send('mrad.setzone "{}"'.format(self._zoneId))
             self._parent.send('mrad.volume {}'.format(volume))
+        else:
+            # TODO:
+            return
 
     def media_play(self):
         # Send play command.
-        self._parent.send('mrad.setzone "{}"'.format(self._zoneId))
-        self._parent.send('mrad.play')
+        if self._parent._mode == MODE_MRAD:
+            self._parent.send('mrad.setzone "{}"'.format(self._zoneId))
+            self._parent.send('mrad.play')
+        else:
+            self._parent.send('setInstance "{}"'.format(self._sourceId))
+            self._parent.send('play')
 
     def media_pause(self):
         # Send pause command.
-        self._parent.send('mrad.setzone "{}"'.format(self._zoneId))
-        self._parent.send('mrad.pause')
+        if self._parent._mode == MODE_MRAD:
+            self._parent.send('mrad.setzone "{}"'.format(self._zoneId))
+            self._parent.send('mrad.pause')
+        else:
+            self._parent.send('setInstance "{}"'.format(self._sourceId))
+            self._parent.send('pause')
 
     def media_stop(self):
         # Send stop command.
-        self._parent.send('mrad.setzone "{}"'.format(self._zoneId))
-        self._parent.send('mrad.stop')
+        if self._parent._mode == MODE_MRAD:
+            self._parent.send('mrad.setzone "{}"'.format(self._zoneId))
+            self._parent.send('mrad.stop')
+        else:
+            self._parent.send('setInstance "{}"'.format(self._sourceId))
+            self._parent.send('stop')
 
     def media_previous_track(self):
         # Send previous track command.
-        self._parent.send('mrad.setzone "{}"'.format(self._zoneId))
-        self._parent.send('mrad.SkipPrevious')
+        if self._parent._mode == MODE_MRAD:
+            self._parent.send('mrad.setzone "{}"'.format(self._zoneId))
+            self._parent.send('mrad.SkipPrevious')
+        else:
+            self._parent.send('setInstance "{}"'.format(self._sourceId))
+            self._parent.send('SkipPrevious')
 
     def media_next_track(self):
         # Send next track command.
-        self._parent.send('mrad.setzone "{}"'.format(self._zoneId))
-        self._parent.send('mrad.SkipNext')
+        if self._parent._mode == MODE_MRAD:
+            self._parent.send('mrad.setzone "{}"'.format(self._zoneId))
+            self._parent.send('mrad.SkipNext')
+        else:
+            self._parent.send('setInstance "{}"'.format(self._sourceId))
+            self._parent.send('SkipNext')
 
     def media_seek(self, position):
         # Send seek command.
-        self._parent.send('mrad.setzone "{}"'.format(self._zoneId))
-        self._parent.send('mrad.setsource')
+        if self._parent._mode == MODE_MRAD:
+            self._parent.send('mrad.setzone "{}"'.format(self._zoneId))
+            self._parent.send('mrad.setsource')
+        else:
+            self._parent.send('setInstance "{}"'.format(self._sourceId))
+
         self._parent.send('seek {}'.format(int(position)))
         # Invalidate TrackTime so it gets updated next report
         self._parent.pop_event(self._sourceId,'TrackTime')
@@ -1051,8 +1241,11 @@ class AutonomicZone(MediaPlayerEntity):
     def play_media(self, media_type, media_id, **kwargs):
         # Play a piece of media.
         # <ServiceCall media_player.play_media: media_content_type=music, media_content_id=http://192.168.13.91:8123/api/tts_proxy/74a4297365735b6c107b85e034347ce013eeae01_en_-_google.mp3, entity_id=['media_player.mt_office']>
-        self._parent.send('mrad.setzone "{}"'.format(self._zoneId))
-        self._parent.send('mrad.setsource')
+        if self._parent._mode == MODE_MRAD:
+            self._parent.send('mrad.setzone "{}"'.format(self._zoneId))
+            self._parent.send('mrad.setsource')
+        else:
+            self._parent.send('setInstance "{}"'.format(self._sourceId))
 
         media_type = media_type.lower()
 
@@ -1083,20 +1276,33 @@ class AutonomicZone(MediaPlayerEntity):
 
     def select_source(self, source):
         # Select input source.
-        self._parent.send('mrad.setzone "{}"'.format(self._zoneId))
-        self._parent.send('mrad.setsource "{}"'.format(source))
+        if self._parent._mode == MODE_MRAD:
+            self._parent.send('mrad.setzone "{}"'.format(self._zoneId))
+            self._parent.send('mrad.setsource "{}"'.format(source))
 
     def clear_playlist(self):
         # Clear players playlist.
-        self._parent.send('mrad.setzone "{}"'.format(self._zoneId))
-        self._parent.send('mrad.setsource')
+        if self._parent._mode == MODE_MRAD:
+            self._parent.send('mrad.setzone "{}"'.format(self._zoneId))
+            self._parent.send('mrad.setsource')
+        else:
+            self._parent.send('setInstance "{}"'.format(self._sourceId))
+
         self._parent.send('clearnowplaying false')
 
-    """
+
     def set_shuffle(self, shuffle):
-        # Enable/disable shuffle mode.
-        raise NotImplementedError()
-    """
+        # Clear players playlist.
+        if self._parent._mode == MODE_MRAD:
+            self._parent.send('mrad.setzone "{}"'.format(self._zoneId))
+            self._parent.send('mrad.setsource')
+        else:
+            self._parent.send('setInstance "{}"'.format(self._sourceId))
+
+        if shuffle:
+            self._parent.send('shuffle true')
+        else:
+            self._parent.send('shuffle false')
 
     @property
     def state_attributes(self):
@@ -1113,5 +1319,6 @@ class AutonomicZone(MediaPlayerEntity):
             state_attr[ATTR_SYSTEM_ID] = self._parent.id
             state_attr[ATTR_PLATFORM ] = DATA_AUTONOMIC
             state_attr[ATTR_VERSION  ] = self._parent.version
+            state_attr[ATTR_MODE     ] = self._parent._mode
 
         return state_attr

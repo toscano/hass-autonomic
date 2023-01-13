@@ -18,16 +18,41 @@ Copy the `custom_components/autonomic` directory to your `custom_components` fol
 
 Configuration Options:
 
-* **host**: Host IP of the MMS eSeries Server (Required)
+* ```host```: Host IP of the MMS eSeries Server (Required)
+* ```mode```: standalone OR mrad (Optional defaults to mrad)
+
+## Autonomic System
+```mode: mrad```
+
+Use this mode when you have a complete Autonomic system including at least one Autonomic eSeries Media Player and at least one Autonomic eSeries Amplifier.
+* `media_player` objects in Home Assistant created as part of an Autonomic System always have `power` and `volume` controls.
 
 ```yaml
-# Example configuration.yaml
+# Example configuration.yaml for use with a complete Autonomic System
+# (Player and one or more Amps aka mrad mode)
 media_player:
    - platform: autonomic
      hosts:
         - host: 192.168.1.80
 ```
+![mrad-example](./images/mrad.png )
+
+## Standalone mode:
+``` mode: standalone```
+
+Use this mode when you only have an Autonomic eSeries Media Player
+* `media_player` objects in Home Assistant created as part of a Standalone Media Player never have `power` controls and only have `volume` controls if ***not*** configured to have `fixed` volume. Consult your Autonomic configuration.
+
+```yaml
+# Example configuration.yaml for use with a stanalone Autonomic Media Player
+media_player:
+   - platform: autonomic
+     hosts:
+        - host: 192.168.1.80
+          mode: standalone
+```
+![standalone-example](./images/standalone.png )
 
 ## Services
 
-Adds new service `media_player.autonomic_all_off` which takes no parameters and powers off all zones.
+Adds new service `media_player.autonomic_all_off` which takes no parameters and powers off all players.
