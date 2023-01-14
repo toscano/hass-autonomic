@@ -1178,8 +1178,15 @@ class AutonomicZone(MediaPlayerEntity):
             self._parent.send('mrad.setzone "{}"'.format(self._zoneId))
             self._parent.send('mrad.volume {}'.format(volume))
         else:
-            # TODO:
-            return
+            gainMode = self._parent.get_event(self._zoneId, 'GainMode')
+            if gainMode is not None and gainMode == 'Fixed':
+                return
+
+            maxVolume = 50
+
+            volume = int( float(volume) * float(maxVolume) )
+            self._parent.send('setInstance "{}"'.format(self._sourceId))
+            self._parent.send('setvolume {}'.format(volume))
 
     def media_play(self):
         # Send play command.
