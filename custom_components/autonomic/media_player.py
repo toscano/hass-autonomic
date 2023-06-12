@@ -143,8 +143,7 @@ def _add_autonomic_host(hass, async_add_devices, host, port=None, mode=None, fro
         hass.bus.async_listen_once(EVENT_HOMEASSISTANT_START, _init_streamer)
 
 
-@asyncio.coroutine
-def async_setup_platform(hass, config, async_add_devices, discovery_info=None):
+async def async_setup_platform(hass, config, async_add_devices, discovery_info=None):
     """Set up the Autonomic platforms."""
     if DATA_AUTONOMIC not in hass.data:
         hass.data[DATA_AUTONOMIC] = []
@@ -167,8 +166,7 @@ def async_setup_platform(hass, config, async_add_devices, discovery_info=None):
                                 , host.get(CONF_MODE).lower()
                                 , True)
 
-    @asyncio.coroutine
-    def async_service_handler(service):
+    async def async_service_handler(service):
         method = SERVICE_TO_METHOD.get(service.service)
         if not method:
             return
@@ -214,8 +212,7 @@ class AutonomicStreamer:
 
         async_track_time_interval(self._hass, self._async_check_ping, PING_INTERVAL)
 
-    @asyncio.coroutine
-    def async_init(self):
+    async def async_init(self):
         self._init_callback()
 
     def start(self):
@@ -223,16 +220,14 @@ class AutonomicStreamer:
         _LOGGER.debug("%s:start %s with mode=%s", self.host, self.host, self._mode)
         self._hass.async_add_job(self._async_open())
 
-    @asyncio.coroutine
-    def async_stop(self):
+    async def async_stop(self):
         """Stop - Like a destructor."""
         _LOGGER.debug("%s:stop %s", self.host, self.host)
         self._closing = True
         self._queue_future.cancel()
         self.is_connected = False
 
-    @asyncio.coroutine
-    def _async_open(self):
+    async def _async_open(self):
         """
         Connect to the server and start processing responses.
         """
@@ -253,9 +248,9 @@ class AutonomicStreamer:
                 websession = async_get_clientsession(self._hass)
                 url = "http://{}:5005/upnp/DevDesc/0.xml".format(self.host)
                 with async_timeout.timeout(10):
-                        response = yield from websession.get(url)
+                        response = await websession.get(url)
 
-                body = yield from response.text()
+                body = await response.text()
                 #_LOGGER.debug(body)
 
                 data = xmltodict.parse(body)
@@ -287,7 +282,7 @@ class AutonomicStreamer:
                 workToDo = False
             except:
                 _LOGGER.warn("%s:Description request to %s failed... will try again in %d seconds.", self.host, url, connectHoldoff)
-                yield from asyncio.sleep(connectHoldoff)
+                await asyncio.sleep(connectHoldoff)
 
         # Now open the socket
         workToDo = True
@@ -295,11 +290,11 @@ class AutonomicStreamer:
             try:
                 _LOGGER.info("%s:Connecting to %s:%s", self.id, self.host, self._port)
 
-                reader, writer = yield from asyncio.open_connection(self.host, self._port)
+                reader, writer = await asyncio.open_connection(self.host, self._port)
                 workToDo = False
             except:
                 _LOGGER.warn("%s:Connection to %s:%s failed... will try again in %d seconds.", self.id, self.host, self._port, RETRY_CONNECT_SECONDS)
-                yield from asyncio.sleep(RETRY_CONNECT_SECONDS)
+                await asyncio.sleep(RETRY_CONNECT_SECONDS)
 
         # reset the pending commands
         self._cmd_queue = asyncio.Queue()
@@ -329,8 +324,7 @@ class AutonomicStreamer:
         _LOGGER.info("%s:Connected to %s:%s", self.id, self.host, self._port)
         self.is_connected = True
 
-    @asyncio.coroutine
-    def _async_check_ping(self, now=None):
+    async def _async_check_ping(self, now=None):
         """Maybe send a ping."""
         if (self.is_connected == False):
             return
@@ -353,8 +347,7 @@ class AutonomicStreamer:
                 _LOGGER.debug("%s:PING...resetting ping %s",  self.id, self._last_inbound_data_utc)
             self._sent_ping = 0
 
-    @asyncio.coroutine
-    def _async_close(self):
+    async def _async_close(self):
         """
         Disconnect from the server.
         """
@@ -362,8 +355,7 @@ class AutonomicStreamer:
         self._closing = True
         self._queue_future.cancel()
 
-    @asyncio.coroutine
-    def _ioloop(self, reader, writer):
+    async def _ioloop(self, reader, writer):
 
         self._queue_future = asyncio.ensure_future(self._cmd_queue.get())
 
@@ -373,7 +365,7 @@ class AutonomicStreamer:
 
             while True:
 
-                done, pending = yield from asyncio.wait(
+                done, pending = await asyncio.wait(
                         [self._queue_future, self._net_future],
                         return_when=asyncio.FIRST_COMPLETED)
 
@@ -406,7 +398,7 @@ class AutonomicStreamer:
                     #_LOGGER.info("%s:--> %s", self.host, cmd)
                     cmd += '\r'
                     writer.write(bytearray(cmd, 'utf-8'))
-                    yield from writer.drain()
+                    await writer.drain()
 
                     self._queue_future = asyncio.ensure_future(self._cmd_queue.get())
 
