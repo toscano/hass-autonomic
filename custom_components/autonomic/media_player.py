@@ -1091,28 +1091,34 @@ class AutonomicZone(MediaPlayerEntity):
                     MediaPlayerEntityFeature.CLEAR_PLAYLIST  | \
                     MediaPlayerEntityFeature.PLAY
 
-                #ReportState Player_A SkipNextAvailable=True
-                b = self._parent.get_event(self._sourceId, 'SkipNextAvailable')
-                if b is not None and b.find('T')==0:
-                    s = s | MediaPlayerEntityFeature.NEXT_TRACK
+                if self._parent._mode == MODE_STANDALONE:
+                    #ReportState Player_A SkipNextAvailable=True
+                    b = self._parent.get_event(self._sourceId, 'SkipNextAvailable')
+                    if b is not None and b.find('T')==0:
+                        s = s | MediaPlayerEntityFeature.NEXT_TRACK
 
-                #ReportState Player_A SkipPrevAvailable=True
-                b = self._parent.get_event(self._sourceId, 'SkipPrevAvailable')
-                if b is not None and b.find('T')==0:
-                    s = s | MediaPlayerEntityFeature.PREVIOUS_TRACK
+                    #ReportState Player_A SkipPrevAvailable=True
+                    b = self._parent.get_event(self._sourceId, 'SkipPrevAvailable')
+                    if b is not None and b.find('T')==0:
+                        s = s | MediaPlayerEntityFeature.PREVIOUS_TRACK
 
-                #ReportState Player_A ShuffleAvailable=True
-                b = self._parent.get_event(self._sourceId, 'ShuffleAvailable')
-                if b is not None and b.find('T')==0:
-                    s = s |  MediaPlayerEntityFeature.SHUFFLE_SET
+                    #ReportState Player_A ShuffleAvailable=True
+                    b = self._parent.get_event(self._sourceId, 'ShuffleAvailable')
+                    if b is not None and b.find('T')==0:
+                        s = s |  MediaPlayerEntityFeature.SHUFFLE_SET
 
-                #ReportState Player_A SeekAvailable=True
-                b = self._parent.get_event(self._sourceId, 'SeekAvailable')
-                if b is not None and b.find('T')==0:
-                    s = s |  MediaPlayerEntityFeature.SEEK
+                    #ReportState Player_A SeekAvailable=True
+                    b = self._parent.get_event(self._sourceId, 'SeekAvailable')
+                    if b is not None and b.find('T')==0:
+                        s = s |  MediaPlayerEntityFeature.SEEK
 
-                #ReportState Player_A RepeatAvailable=True
-                #ReportState Player_A PlayPauseAvailable=True
+                    #ReportState Player_A RepeatAvailable=True
+                    #ReportState Player_A PlayPauseAvailable=True
+                else:
+                    s = s | MediaPlayerEntityFeature.NEXT_TRACK     | \
+                            MediaPlayerEntityFeature.PREVIOUS_TRACK | \
+                            MediaPlayerEntityFeature.SHUFFLE_SET    | \
+                            MediaPlayerEntityFeature.SEEK
             else:
 
                 s = MediaPlayerEntityFeature.VOLUME_STEP     | \
