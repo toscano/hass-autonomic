@@ -640,9 +640,9 @@ class AutonomicStreamer:
 
             sources = []
             for source in group['Sources']['Source']:
-                fqn = source.get('@fqn', "")
+                fqn = source.get('@name', "")
                 if fqn == "":
-                    fqn = source['@name']
+                    fqn = source['@fqn']
 
                 # Add that to the list of ALL sources for this (these) zone(s)
                 sources.append(fqn)
