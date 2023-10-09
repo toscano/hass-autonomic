@@ -451,7 +451,7 @@ class AutonomicStreamer:
         data = xmltodict.parse(res, force_list=('Instance',))
 
         if data['Instances']['@total'] == '0':
-             _LOGGER.warn("%s:Total Instances=%s with mode=%s.", self.id, data['Instances']['@total'], self._mode)
+            _LOGGER.warn("%s:Total Instances=%s with mode=%s.", self.id, data['Instances']['@total'], self._mode)
 
         #  There's a chance that the Zone count is zero... That's handled as an exception/reconnect
         for instance in data['Instances']['Instance']:
@@ -483,7 +483,7 @@ class AutonomicStreamer:
             self._events['{}.mArt'.format(sourceId) ]=mArt
 
             if guid in self._zones:
-                found           = self._zones[guid]
+                found = self._zones[guid]
                 found.schedule_update_ha_state()
             else:
                 name    = instance['@friendlyName']
@@ -549,7 +549,7 @@ class AutonomicStreamer:
         data = xmltodict.parse(res, force_list=('Zone',))
 
         if data['Zones']['@total'] == '0':
-             _LOGGER.warn("%s:Total Zones=%s with mode=%s. Should you be using mode=%s ?", self.id, data['Zones']['@total'], self._mode, MODE_STANDALONE)
+            _LOGGER.warn("%s:Total Zones=%s with mode=%s. Should you be using mode=%s ?", self.id, data['Zones']['@total'], self._mode, MODE_STANDALONE)
 
         #  There's a chance that the Zone count is zero... That's handled as an exception/reconnect
         for zone in data['Zones']['Zone']:
@@ -578,7 +578,7 @@ class AutonomicStreamer:
             sourceId= 'Source_{}'.format(zone['@sourceId'])
 
             if guid in self._zones:
-                found           = self._zones[guid]
+                found = self._zones[guid]
                 found.set_source_id( sourceId )
             else:
                 name  = zone['@name']
