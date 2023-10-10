@@ -316,7 +316,7 @@ class AutonomicStreamer:
             self.send('mrad.browsezonegroups')
 
             # Subscribe and catchup
-            self.send('mrad.subscribeevents source')
+            self.send('mrad.subscribeevents')
             self.send('mrad.getstatus')
 
         self._ioloop_future = asyncio.ensure_future(self._ioloop(reader, writer))
@@ -489,8 +489,8 @@ class AutonomicStreamer:
                 name    = instance['@friendlyName']
                 id      = instance['@name']
 
-                _LOGGER.info("%s:ADDING ZONE: %s %s", self.id, id, name)
-                zone = AutonomicZone(self, self._hass, guid, name, id, sourceId)
+                _LOGGER.info("%s:ADDING STANDALONE ZONE: %s %s", self.id, id, name)
+                zone = AutonomicZone(self, self._hass, guid, name, id, sourceId, False)
                 self._zones[guid] = zone
                 self._async_add_devices([zone])
 
@@ -579,13 +579,22 @@ class AutonomicStreamer:
 
             if guid in self._zones:
                 found = self._zones[guid]
-                found.set_source_id( sourceId )
+                found.set_source_and_group( sourceId, "", "" )
             else:
                 name  = zone['@name']
                 id    = zone['@id']
 
-                _LOGGER.info("%s:ADDING ZONE: %s %s", self.id, id, name)
-                zone = AutonomicZone(self, self._hass, guid, name, id, sourceId)
+                # First add the standalone mrad zone
+                _LOGGER.info("%s:ADDING MRAD ZONE: %s %s", self.id, id, name)
+                zone = AutonomicZone(self, self._hass, guid, name, id, sourceId, False)
+                self._zones[guid] = zone
+                self._async_add_devices([zone])
+
+                # Then add the Group mrad zone
+                guid = guid + "_group"
+                name = name + " group"
+                _LOGGER.info("%s:ADDING MRAD GROUP ZONE: %s %s", self.id, id, name)
+                zone = AutonomicZone(self, self._hass, guid, name, id, sourceId, True)
                 self._zones[guid] = zone
                 self._async_add_devices([zone])
 
@@ -618,6 +627,8 @@ class AutonomicStreamer:
             #         <Source guid="000027f5-5ace-e5da-ba88-8cf58dd178f2" name="CD120-1" dna="name" isSearchable="false" fqn="" smart="0" next="0" sId="10101" iconId="Source" />
             #     </Sources>
             # </ZoneGroup>
+            groupGuid= group.get('@guid', "")
+            groupName= group.get('@name', "")
             sId      = group.get('@sId', "0")
             sourceId = "Source_{}".format(sId)
             mArt     = group.get('@mArt', "" )
@@ -662,7 +673,13 @@ class AutonomicStreamer:
                 guid = vZone["@guid"]
                 if guid in self._zones:
                     found = self._zones[guid]
-                    found.set_source_id( sourceId )
+                    found.set_source_and_group( sourceId, groupGuid, groupName )
+
+                # And in the the zone group
+                guid = guid + "_group"
+                if guid in self._zones:
+                    found = self._zones[guid]
+                    found.set_source_and_group( sourceId, groupGuid, groupName )
 
     def _process_mrad_event(self, res):
         # Parse...
@@ -722,22 +739,29 @@ class AutonomicStreamer:
 class AutonomicZone(MediaPlayerEntity):
     # Representation of an Autonomic Zone
 
-    def __init__(self, parent, hass, guid, name, zoneId, sourceId):
+    def __init__(self, parent, hass, guid, name, zoneId, sourceId, isGroupZone):
         self._parent        = parent
         self._hass          = hass
         self._guid          = guid
         self._name          = name
         self._zoneId        = zoneId
         self._sourceId      = sourceId
+        self._isGroupZone   = isGroupZone
+        self._groupGuid     = ""
+        self._groupName     = ""
 
         self._access_token  = None
 
-    def set_source_id(self, newSourceId):
+    def set_source_and_group(self, newSourceId, groupGuid, groupName):
         oldSourceId = self._sourceId
 
         if newSourceId != oldSourceId:
             self._sourceId = newSourceId
             self.schedule_update_ha_state()
+
+        if groupGuid != "":
+            self._groupGuid = groupGuid
+            self._groupName = groupName
 
     @property
     def name(self):
@@ -795,7 +819,10 @@ class AutonomicZone(MediaPlayerEntity):
         if self._parent.is_connected:
             if self._parent._mode == MODE_MRAD:
                 maxVolume = self._parent.get_event(self._zoneId, 'MaxVolume')
-                volume = self._parent.get_event(self._zoneId, 'Volume')
+                if self._isGroupZone:
+                    volume = self._parent.get_event(self._groupName, 'Volume')
+                else:
+                    volume = self._parent.get_event(self._zoneId, 'Volume')
             else:
                 maxVolume = 50
                 gainMode = self._parent.get_event(self._zoneId, 'GainMode')
@@ -822,8 +849,11 @@ class AutonomicZone(MediaPlayerEntity):
     async def async_volume_up(self) -> None:
         """Volume up the media player."""
         if self._parent._mode == MODE_MRAD:
-            self._parent.send('mrad.setzone "{}"'.format(self._zoneId))
-            self._parent.send('mrad.volumeup')
+            if self._isGroupZone:
+                self._parent.send('mrad.volumeup "{}"'.format(self._groupGuid))
+            else:
+                self._parent.send('mrad.setzone "{}"'.format(self._zoneId))
+                self._parent.send('mrad.volumeup')
         else:
             gainMode = self._parent.get_event(self._zoneId, 'GainMode')
             if gainMode is not None and gainMode == 'Fixed':
@@ -835,8 +865,11 @@ class AutonomicZone(MediaPlayerEntity):
     async def async_volume_down(self) -> None:
         """Volume down the media player."""
         if self._parent._mode == MODE_MRAD:
-            self._parent.send('mrad.setzone "{}"'.format(self._zoneId))
-            self._parent.send('mrad.volumedown')
+            if self._isGroupZone:
+                self._parent.send('mrad.volumedown "{}"'.format(self._groupGuid))
+            else:
+                self._parent.send('mrad.setzone "{}"'.format(self._zoneId))
+                self._parent.send('mrad.volumedown')
         else:
             gainMode = self._parent.get_event(self._zoneId, 'GainMode')
             if gainMode is not None and gainMode == 'Fixed':
@@ -1177,18 +1210,20 @@ class AutonomicZone(MediaPlayerEntity):
 
     def mute_volume(self, mute):
         # Mute the volume.
+        if mute:
+            newState = "on"
+        else:
+            newState = "off"
+
         if self._parent._mode == MODE_MRAD:
-            self._parent.send('mrad.setzone "{}"'.format(self._zoneId))
-            if mute:
-                self._parent.send('mrad.mute on')
+            if self._isGroupZone:
+                self._parent.send('mrad.mute {} "{}"'.format(newState, self._groupGuid))
             else:
-                self._parent.send('mrad.mute off')
+                self._parent.send('mrad.setzone "{}"'.format(self._zoneId))
+                self._parent.send('mrad.mute {}'.format(newState))
         else:
             self._parent.send('setInstance "{}"'.format(self._sourceId))
-            if mute:
-                self._parent.send('mute on')
-            else:
-                self._parent.send('mute off')
+            self._parent.send('mute {}'.format(newState))
 
     def set_volume_level(self, volume):
         # Set volume level, range 0..1.
@@ -1199,8 +1234,12 @@ class AutonomicZone(MediaPlayerEntity):
                 maxVolume = 80
 
             volume = int( float(volume) * float(maxVolume) )
-            self._parent.send('mrad.setzone "{}"'.format(self._zoneId))
-            self._parent.send('mrad.volume {}'.format(volume))
+
+            if self._isGroupZone:
+                self._parent.send('mrad.volume {} {}'.format(volume, self._groupGuid))
+            else:
+                self._parent.send('mrad.setzone "{}"'.format(self._zoneId))
+                self._parent.send('mrad.volume {}'.format(volume))
         else:
             gainMode = self._parent.get_event(self._zoneId, 'GainMode')
             if gainMode is not None and gainMode == 'Fixed':
