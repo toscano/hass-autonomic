@@ -819,6 +819,32 @@ class AutonomicZone(MediaPlayerEntity):
 
         return None
 
+    async def async_volume_up(self) -> None:
+        """Volume up the media player."""
+        if self._parent._mode == MODE_MRAD:
+            self._parent.send('mrad.setzone "{}"'.format(self._zoneId))
+            self._parent.send('mrad.volumeup')
+        else:
+            gainMode = self._parent.get_event(self._zoneId, 'GainMode')
+            if gainMode is not None and gainMode == 'Fixed':
+                return
+
+            self._parent.send('setInstance "{}"'.format(self._sourceId))
+            self._parent.send('volumeup')
+
+    async def async_volume_down(self) -> None:
+        """Volume down the media player."""
+        if self._parent._mode == MODE_MRAD:
+            self._parent.send('mrad.setzone "{}"'.format(self._zoneId))
+            self._parent.send('mrad.volumedown')
+        else:
+            gainMode = self._parent.get_event(self._zoneId, 'GainMode')
+            if gainMode is not None and gainMode == 'Fixed':
+                return
+
+            self._parent.send('setInstance "{}"'.format(self._sourceId))
+            self._parent.send('volumedown')
+
     @property
     def is_volume_muted(self):
         # Boolean if volume is currently muted.
