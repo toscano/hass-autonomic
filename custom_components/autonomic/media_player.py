@@ -653,7 +653,7 @@ class AutonomicStreamer:
             for source in group['Sources']['Source']:
                 fqn = source.get('@name', "")
                 if fqn == "":
-                    fqn = source['@fqn']
+                    fqn = source['@fqn'].split("@")[0]
 
                 # Add that to the list of ALL sources for this (these) zone(s)
                 sources.append(fqn)
@@ -1086,6 +1086,8 @@ class AutonomicZone(MediaPlayerEntity):
 
             if sourceName == "":
                 sourceName = None
+            else:
+                sourceName = sourceName.split("@")[0]
 
             if sourceName is None:
                 sourceName = self._parent.get_event(self._sourceId, 'SourceName')
