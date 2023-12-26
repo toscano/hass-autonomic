@@ -305,19 +305,24 @@ class AutonomicStreamer:
         self.send('setclienttype hass')
         self.send('setxmlmode lists')
 
+        # The order is important here!
+        # Get the events FIRST so values wont be None.
         if self._mode == MODE_STANDALONE:
-            self.send('browseinstances')
-
             # Subscribe and catchup
             self.send('subscribeevents')
             self.send('getstatus')
-        else:
-            self.send('mrad.browsezones')
-            self.send('mrad.browsezonegroups')
 
+            self.send('browseinstances')
+        else:
             # Subscribe and catchup
             self.send('mrad.subscribeevents')
             self.send('mrad.getstatus')
+            self.send('subscribeevents')
+            self.send('getstatus')
+
+            self.send('mrad.browsezones')
+            self.send('mrad.browsezonegroups')
+
 
         self._ioloop_future = asyncio.ensure_future(self._ioloop(reader, writer))
 
@@ -530,20 +535,19 @@ class AutonomicStreamer:
             value = True
             self._events[key]=value
 
-        # Shortcut to better art
-        if name == 'MediaArtChanged':
-            self.send('browseinstances')
-            return
+        if self._mode == MODE_STANDALONE:
+            # Shortcut to better art
+            if name == 'MediaArtChanged':
+                self.send('browseinstances')
+                return
 
-        # Schedule an update for the associated Zone(s)
-        for guid in self._zones:
-            zone = self._zones[guid]
-            if zone._zoneId == entityId:
-                zone.schedule_update_ha_state()
-            elif zone._sourceId == entityId:
-                zone.schedule_update_ha_state()
-
-
+            # Schedule an update for the associated Zone(s)
+            for guid in self._zones:
+                zone = self._zones[guid]
+                if zone._zoneId == entityId:
+                    zone.schedule_update_ha_state()
+                elif zone._sourceId == entityId:
+                    zone.schedule_update_ha_state()
 
     def _process_mrad_zone_response(self, res):
         data = xmltodict.parse(res, force_list=('Zone',))
@@ -1176,10 +1180,29 @@ class AutonomicZone(MediaPlayerEntity):
                     #ReportState Player_A RepeatAvailable=True
                     #ReportState Player_A PlayPauseAvailable=True
                 else:
-                    s = s | MediaPlayerEntityFeature.NEXT_TRACK     | \
-                            MediaPlayerEntityFeature.PREVIOUS_TRACK | \
-                            MediaPlayerEntityFeature.SHUFFLE_SET    | \
-                            MediaPlayerEntityFeature.SEEK
+                    # MRAD.ReportState Zone_1 SourceName=Main
+                    instanceKey = self._parent.get_event( self._zoneId, "SourceName" )
+                    _LOGGER.info("xyzzy: Zone '{}' is Looking for '{}'.".format(self._zoneId, instanceKey))
+
+                    #ReportState Player_A SkipNextAvailable=True
+                    b = self._parent.get_event(instanceKey, 'SkipNextAvailable')
+                    if b is not None and b.find('T')==0:
+                        s = s | MediaPlayerEntityFeature.NEXT_TRACK
+
+                    #ReportState Player_A SkipPrevAvailable=True
+                    b = self._parent.get_event(instanceKey, 'SkipPrevAvailable')
+                    if b is not None and b.find('T')==0:
+                        s = s | MediaPlayerEntityFeature.PREVIOUS_TRACK
+
+                    #ReportState Player_A ShuffleAvailable=True
+                    b = self._parent.get_event(instanceKey, 'ShuffleAvailable')
+                    if b is not None and b.find('T')==0:
+                        s = s |  MediaPlayerEntityFeature.SHUFFLE_SET
+
+                    #ReportState Player_A SeekAvailable=True
+                    b = self._parent.get_event(instanceKey, 'SeekAvailable')
+                    if b is not None and b.find('T')==0:
+                        s = s |  MediaPlayerEntityFeature.SEEK
             else:
 
                 s = MediaPlayerEntityFeature.VOLUME_STEP     | \
