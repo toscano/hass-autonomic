@@ -1088,6 +1088,9 @@ class AutonomicZone(MediaPlayerEntity):
             if sourceName is None:
                 sourceName = self._parent.get_event(self._sourceId, 'QualifiedSourceName')
 
+            if sourceName is None:
+                sourceName = ""
+
             if sourceName == "":
                 sourceName = None
             else:
@@ -1095,6 +1098,9 @@ class AutonomicZone(MediaPlayerEntity):
 
             if sourceName is None:
                 sourceName = self._parent.get_event(self._sourceId, 'SourceName')
+
+            if sourceName is None:
+                sourceName = ""
 
             if sourceName == "":
                 sourceName = None
