@@ -1188,7 +1188,6 @@ class AutonomicZone(MediaPlayerEntity):
                 else:
                     # MRAD.ReportState Zone_1 SourceName=Main
                     instanceKey = self._parent.get_event( self._zoneId, "SourceName" )
-                    _LOGGER.info("xyzzy: Zone '{}' is Looking for '{}'.".format(self._zoneId, instanceKey))
 
                     #ReportState Player_A SkipNextAvailable=True
                     b = self._parent.get_event(instanceKey, 'SkipNextAvailable')
