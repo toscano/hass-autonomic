@@ -654,7 +654,15 @@ class AutonomicStreamer:
                 self._events['{}.SmartSource'.format(sourceId) ]=True
 
             sources = []
-            for source in group['Sources']['Source']:
+
+            # Make sure we've got a list to process which isn't true if there
+            # is only one source enabled on the MMS. Crazy right?
+            if isinstance(group['Sources']['Source'], list):
+                sourcesList = group['Sources']['Source']
+            else:
+                sourcesList = [group['Sources']['Source']]
+
+            for source in sourcesList:
                 fqn = source.get('@name', "")
                 if fqn == "":
                     fqn = source['@fqn'].split("@")[0]
