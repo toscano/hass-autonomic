@@ -10,11 +10,11 @@ import aiohttp
 from homeassistant import config_entries
 from homeassistant.components import zeroconf
 from homeassistant.config_entries import ConfigFlow
-from homeassistant.const import CONF_HOST, CONF_NAME, CONF_UUID, CONF_MODE
+from homeassistant.const import CONF_HOST, CONF_NAME, CONF_UUID, CONF_MODE, CONF_ZONE
 from homeassistant.data_entry_flow import FlowResult
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
-from .const import DOMAIN, MODE_UNKNOWN, MIN_VERSION_REQUIRED
+from .const import DOMAIN, MODE_UNKNOWN, MIN_VERSION_REQUIRED, MODE_MRAD, MODE_STANDALONE
 from .controller import Controller
 
 LOGGER = logging.getLogger(__package__)
@@ -33,6 +33,7 @@ class AutonomicESeriesFlowHandler(ConfigFlow, domain=DOMAIN):
         self._uuid: str | None = None
         self._version: str | None = None
         self._mode: str = MODE_UNKNOWN
+        self._zones: list = []
 
         self._errors: dict[str, str] = {}
 
@@ -62,6 +63,13 @@ class AutonomicESeriesFlowHandler(ConfigFlow, domain=DOMAIN):
                 self._version = client._version
                 self._mode = client._mode
 
+                if self._mode == MODE_STANDALONE:
+                    self._zones = client._instances
+                elif self._mode == MODE_MRAD:
+                    self._zones = client._zones
+                else:
+                    raise ZeroDivisionError
+
             except ValueError:
                 self._errors["base"] = "min_firmware_required"
                 LOGGER.error(f"Your {client._name} is running firmware {client._version} which is less than {MIN_VERSION_REQUIRED}")
@@ -81,10 +89,10 @@ class AutonomicESeriesFlowHandler(ConfigFlow, domain=DOMAIN):
         await self.async_set_unique_id(self._uuid)
         self._abort_if_unique_id_configured()
 
-        LOGGER.debug(f"Returning create entry : {self._host} / {self._name} / {self._uuid} / {self._mode}")
+        LOGGER.debug(f"Returning create entry : {self._host} / {self._name} / {self._uuid} / {self._mode} / {self._zones}")
         return self.async_create_entry(
             title=self._name,
-            data={CONF_HOST: self._host, CONF_NAME: self._name, CONF_UUID: self._uuid, CONF_MODE: self._mode},
+            data={CONF_HOST: self._host, CONF_NAME: self._name, CONF_UUID: self._uuid, CONF_MODE: self._mode, CONF_ZONE: self._zones},
         )
 
     async def async_step_user(

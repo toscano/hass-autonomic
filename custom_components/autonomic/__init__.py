@@ -4,7 +4,7 @@ from __future__ import annotations
 import logging
 
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.const import CONF_HOST, CONF_NAME, CONF_UUID, CONF_MODE
+from homeassistant.const import CONF_HOST, CONF_NAME, CONF_UUID, CONF_MODE, CONF_ZONE
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
@@ -20,26 +20,32 @@ PLATFORMS: list[str] = ["media_player"]
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Set up our Autonomic MMS from a config entry."""
-    # {'host': '192.168.20.80', 'name': 'MMS-5e', 'uuid': 'a5563017-f622-49c2-bb36-b9e472463cd7', 'mode': 'mode_mrad'}
+    # Setting up Autonomic eSeries
+    # ID:5b436a817f6e5a272d69670836105a7a
+    # DATA:{
+    #       'host': '192.168.20.80'
+    #     , 'name': 'MMS-5e'
+    #     , 'uuid': 'a5563017-f622-49c2-bb36-b9e472463cd7',
+    #     , 'mode': 'mode_mrad'
+    #     , 'zone': [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24]
+    #    }
 
     # Store an instance of the "connecting" class that does the work of speaking
     # with the actual devices.
     LOGGER.info(f"Setting up Autonomic eSeries ID:{entry.entry_id} DATA:{entry.data}")
 
     session = async_get_clientsession(hass)
-    client = controller.Controller(session, entry.data[CONF_HOST], entry.data[CONF_NAME], entry.data[CONF_UUID], entry.data[CONF_MODE])
+    client = controller.Controller(session, entry.data[CONF_HOST], entry.data[CONF_NAME], entry.data[CONF_UUID], entry.data[CONF_MODE], entry.data[CONF_ZONE])
 
-    return False
-
-    ## check availability and connect the webSocket
+    ## Initialize connection to the MMS
     #await client.async_check_connection(True)
 
-    #hass.data.setdefault(DOMAIN, {})[entry.entry_id] = client
+    hass.data.setdefault(DOMAIN, {})[entry.entry_id] = client
 
     ## This creates each HA object for each platform your device requires.
     ## It's done by calling the `async_setup_entry` function in each platform module.
-    #await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
-    #return True
+    await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
+    return True
 
 
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
@@ -49,7 +55,8 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     # details
     LOGGER.info(f"Unloading Autonomic eSeries ID:{entry.entry_id} DATA:{entry.data}")
     client = hass.data[DOMAIN][entry.entry_id]
-    await client.async_ws_close()
+
+    #TODO: Disconnect await client.async_ws_close()
 
     unload_ok = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
     if unload_ok:

@@ -24,13 +24,15 @@ LOGGER = logging.getLogger(__package__)
 class Controller:
     """Controller for talking to the AVPro Matrix switch."""
 
-    def __init__(self, session: aiohttp.ClientSession, host: str, name: str = "", uuid: str = "", mode: str = MODE_UNKNOWN) -> None:
+    def __init__(self, session: aiohttp.ClientSession, host: str, name: str = "", uuid: str = "", mode: str = MODE_UNKNOWN, zones: list = [], instances: list = []) -> None:
         """Init."""
         self._session = session
         self._host: str = host
         self._name: str = name
         self._uuid: str = uuid
         self._mode: str = mode
+        self._zones: list = zones
+        self._instances: list = instances
 
         self._version: str = ""
 
@@ -86,10 +88,25 @@ class Controller:
         self._mode = MODE_STANDALONE
         if json and json["Configured"]:
             for item in json["Configured"]:
-                if item["DeviceType"] == "AMP":
+                if item["DeviceType"] == "MMS":
+                    LOGGER.debug(f"MMS found in stack {item['Id']}")
+                    url = f"http://{self._host}/MirageCfg/jsonModel?t=ServerDetailsModel&id={item['Id']}&_=1"
+                    with async_timeout.timeout(10):
+                        response = await self._session.get(url)
+                    mmsJson = await response.json()
+                    for output in mmsJson["Outputs"]:
+                        if output["IsEnabled"]:
+                            self._instances.append(output["Name"])
+                elif item["DeviceType"] == "AMP":
                     self._mode = MODE_MRAD
-                    LOGGER.debug(f"Found {item['DeviceType']} - {item['DeviceModel']}")
+                    LOGGER.debug(f"Found {item['DeviceType']} - {item['DeviceModel']} - {item['Zones']}")
+                    splits = item['Zones'].split('-')
+                    f = int(splits[0])
+                    t = int(splits[1])+1
+                    for i in range(f,t):
+                        self._zones.append(i)
 
+        self._zones.sort()
         LOGGER.debug("async_check_connections succeeded.")
 
         return True
