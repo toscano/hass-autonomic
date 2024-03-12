@@ -1,0 +1,26 @@
+{
+    "config": {
+        "abort": {
+            "already_configured": "Service is already configured"
+        },
+        "error": {
+            "cannot_connect": "Failed to connect to your MMS.",
+            "unknown_error": "Unknown error connecting to your MMS.",
+            "min_firmware_required": "You need to update your MMS to the latest Firmware."
+        },
+        "flow_title": "{name} ({host})",
+        "step": {
+            "confirm": {
+                "title": "Configure your MMS",
+                "description": "Click SUBMIT to set up the Autonomic {name} ({host})."
+            },
+            "user": {
+                "data": {
+                    "host": "Host"
+                },
+                "title": "Configure your MMS",
+                "description": "Please enter the host name or IP address of the Autonomic MMS.\n\nNote: Your MMS must be running firmware version 6.1.20180215.0 or greater and must be already configured for use with any Autonomic amplifiers you may own."
+            }
+        }
+    }
+}

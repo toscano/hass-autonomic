@@ -1,9 +1,16 @@
 {
-    "domain": "autonomic",
-    "name": "Autonomic e-Series",
-    "documentation": "https://github.com/toscano/hass-autonomic",
-    "issue_tracker": "https://github.com/toscano/hass-autonomic/issues",
-    "codeowners": ["@toscano"],
-    "requirements": ["xmltodict"],
-    "version": "2024.01.0"
+  "domain": "autonomic",
+  "name": "Autonomic MMS eSeries",
+  "codeowners": ["@toscano"],
+  "config_flow": true,
+  "dependencies": [],
+  "documentation": "https://github.com/toscano/hass-autonomic",
+  "issue_tracker": "https://github.com/toscano/hass-autonomic/issues",
+  "homekit": {},
+  "iot_class": "local_push",
+  "integration_type": "device",
+  "requirements": ["xmltodict"],
+  "ssdp": [],
+  "zeroconf": ["_ac-mcs._tcp.local."],
+  "version": "2024.03.0"
 }
