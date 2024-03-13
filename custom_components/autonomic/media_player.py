@@ -3,6 +3,7 @@
 import logging
 
 from homeassistant.components.media_player import (
+    MediaPlayerDeviceClass,
     MediaPlayerEntity,
     MediaPlayerEntityFeature,
     MediaPlayerState,
@@ -45,16 +46,59 @@ class MmsZone(MediaPlayerEntity):
 
     def __init__(self, entry: ConfigEntry, hass: HomeAssistant, controller: controller.Controller, indexOrName: str):
         """Initialize our Media Player"""
+
+        # Member variables that will never need to change
         self._hass = hass
         self._controller = controller
+        self._attr_device_class = MediaPlayerDeviceClass.SPEAKER
+
+        # Member variables that will change as things go...
+        self._attr_app_name = ""
         self._extra_attributes = {}
         self._isOn = False
 
+        """
+        self._attr_app_id: str | None = None
+        self._attr_app_name: str | None = None
+        self._attr_device_class: MediaPlayerDeviceClass | None
+        self._attr_group_members: list[str] | None = None
+        self._attr_is_volume_muted: bool | None = None
+        self._attr_media_album_artist: str | None = None
+        self._attr_media_album_name: str | None = None
+        self._attr_media_artist: str | None = None
+        self._attr_media_channel: str | None = None
+        self._attr_media_content_id: str | None = None
+        self._attr_media_content_type: MediaType | str | None = None
+        self._attr_media_duration: int | None = None
+        self._attr_media_episode: str | None = None
+        self._attr_media_image_hash: str | None
+        self._attr_media_image_remotely_accessible: bool = False
+        self._attr_media_image_url: str | None = None
+        self._attr_media_playlist: str | None = None
+        self._attr_media_position_updated_at: dt.datetime | None = None
+        self._attr_media_position: int | None = None
+        self._attr_media_season: str | None = None
+        self._attr_media_series_title: str | None = None
+        self._attr_media_title: str | None = None
+        self._attr_media_track: int | None = None
+        self._attr_repeat: RepeatMode | str | None = None
+        self._attr_shuffle: bool | None = None
+        self._attr_sound_mode_list: list[str] | None = None
+        self._attr_sound_mode: str | None = None
+        self._attr_source_list: list[str] | None = None
+        self._attr_source: str | None = None
+        self._attr_state: MediaPlayerState | None = None
+        self._attr_supported_features: MediaPlayerEntityFeature = MediaPlayerEntityFeature(0)
+        self._attr_volume_level: float | None = None
+        self._attr_volume_step: float
+        """
+
         if controller._mode == MODE_MRAD:
-            self._name = f"Zone {int(indexOrName):02d}"
+            self._name = f"{controller._name} Zone {int(indexOrName):02d}"
             self._attr_unique_id = f"{entry.unique_id}_zone_{int(indexOrName):02d}"
+
         elif controller._mode == MODE_STANDALONE:
-            self._name = indexOrName
+            self._name = f"{controller._name} {indexOrName}"
             self._attr_unique_id = f"{entry.unique_id}_{indexOrName}"
 
         self._attr_device_info = DeviceInfo(
@@ -63,6 +107,8 @@ class MmsZone(MediaPlayerEntity):
             model=self._controller._name,
             name=self._name
         )
+
+        controller.add_zone_entity(self)
 
 
     def update_ha(self):
@@ -103,7 +149,7 @@ class MmsZone(MediaPlayerEntity):
     @property
     def supported_features(self) -> MediaPlayerEntityFeature:
         """Flag media player features that are supported."""
-        return MediaPlayerEntityFeature.TURN_ON | MediaPlayerEntityFeature.TURN_OFF
+        return MediaPlayerEntityFeature.TURN_ON | MediaPlayerEntityFeature.TURN_OFF | MediaPlayerEntityFeature.GROUPING
 
     """ @property
     def source(self) -> str | None:
@@ -119,18 +165,23 @@ class MmsZone(MediaPlayerEntity):
         # Select input source.
         index = self._controller.video_inputs.index(source)+1
         await self._controller.async_send(f"SET OUT{self._index} {self._output_type}S IN{index}")
-
+    """
     async def async_turn_on(self):
         # Turn the media player on.
-        await self._controller.async_send(f"SET OUT{self._index} STREAM ON")
-
-        # Reset our input signal please
-        if self._sourceIndex != -1:
-            await self._controller.async_send(f"A00 SET IN{self._sourceIndex} RST")
+        self._name = self._name + " Kitchen"
+        self._isOn = True
+        self.update_ha()
 
     async def async_turn_off(self):
-        await self._controller.async_send(f"SET OUT{self._index} STREAM OFF")
+        indx = self._name.find(" Kitchen")
 
+        if indx > 0:
+            self._name = self._name[0:indx]
+
+        self._isOn = False
+        self.update_ha()
+
+    """
     @property
     def extra_state_attributes(self):
         # Return extra state attributes

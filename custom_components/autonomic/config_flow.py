@@ -52,7 +52,7 @@ class AutonomicESeriesFlowHandler(ConfigFlow, domain=DOMAIN):
         if self._name is None or self._uuid is None or self._version is None or self._mode == MODE_UNKNOWN:
 
             session = async_get_clientsession(self.hass)
-            client = Controller(session, self._host)
+            client = Controller(self.hass, session, self._host)
 
             try:
                 await client.async_check_connection()

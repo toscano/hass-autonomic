@@ -1,5 +1,6 @@
 """Constants for the AVPro matrix switch integration."""
 from typing import Final
+from datetime import timedelta
 
 # This is the internal name of the integration, it should also match the directory
 # name for the integration.
@@ -12,3 +13,5 @@ MODE_STANDALONE: Final  = "mode_standalone"
 
 MIN_VERSION_REQUIRED: Final = "6.1.20180215.0"
 
+RETRY_CONNECT_SECONDS: Final= 30
+PING_INTERVAL:Final         = timedelta(seconds=10)

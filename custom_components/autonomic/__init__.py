@@ -7,8 +7,9 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import CONF_HOST, CONF_NAME, CONF_UUID, CONF_MODE, CONF_ZONE
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
+from homeassistant.helpers.event import async_track_time_interval
 
-from .const import DOMAIN
+from .const import DOMAIN, PING_INTERVAL
 from . import controller
 
 LOGGER = logging.getLogger(__package__)
@@ -35,7 +36,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     LOGGER.info(f"Setting up Autonomic eSeries ID:{entry.entry_id} DATA:{entry.data}")
 
     session = async_get_clientsession(hass)
-    client = controller.Controller(session, entry.data[CONF_HOST], entry.data[CONF_NAME], entry.data[CONF_UUID], entry.data[CONF_MODE], entry.data[CONF_ZONE])
+    client = controller.Controller(hass, session, entry.data[CONF_HOST], entry.data[CONF_NAME], entry.data[CONF_UUID], entry.data[CONF_MODE], entry.data[CONF_ZONE])
 
     ## Initialize connection to the MMS
     #await client.async_check_connection(True)
@@ -45,6 +46,10 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     ## This creates each HA object for each platform your device requires.
     ## It's done by calling the `async_setup_entry` function in each platform module.
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
+
+    hass.async_add_job(client.async_connect_to_mms())
+    async_track_time_interval(hass, client.async_check_ping, PING_INTERVAL)
+
     return True
 
 
@@ -56,7 +61,7 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     LOGGER.info(f"Unloading Autonomic eSeries ID:{entry.entry_id} DATA:{entry.data}")
     client = hass.data[DOMAIN][entry.entry_id]
 
-    #TODO: Disconnect await client.async_ws_close()
+    await client.async_disconnect_from_mms()
 
     unload_ok = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
     if unload_ok:
