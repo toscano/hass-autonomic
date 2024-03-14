@@ -2,15 +2,26 @@
 
 NOTE: This integration **REQUIRES** [Home Assistant](https://www.home-assistant.io/) version `2023.6.0` or greater.
 
-Provides support for controlling Autonomic Controls e-Series media systems (Media players paired with Amps) through Home Assistant. Requires Autonomic e-Series servers running firmware `6.1.20180215.0` or greater.
+Provides support for controlling Autonomic Controls e-Series media systems (either paired with Amps or not) through Home Assistant. Requires Autonomic e-Series servers running firmware `6.1.20180215.0` or greater.
 
 Currently Supports:
 
-- One `media_player` object per enabled Autonomic Zone
-- Entity names follow Zone names.
-- Power, volume, mute and source selction
-- Media transports
+- Home Assistant UI configuration.
+- [ZeroConf](https://www.home-assistant.io/integrations/zeroconf/) MMS discovery.
+- One `media_player` object per Autonomic Zone.
+- Entity names follow Zone numbers.
+- Power, volume, mute and source selection.
+- Media transports.
 - Playing meta-data including Art.
+
+>## IMPORTANT NOTE if upgrading from versions v2024.01.0 or lower
+>This integration has been entirely re-written which results in a few **Breaking Changes**:
+> - Before using this updated version you'll need to remove the configuration entry from your `configuration.yaml` file. There should be NO references to `autonomic` in your config file.
+>
+> - Default entity names in `MRAD_MODE` have been changed.  These used to be in the form `media_player.{{zoneName}}` such as `media_player.kitchen` but are now in the form `media_player.{{model}}_zone_{{zoneNumber}}` such as `media_player.mms5e_zone_01`.  You can re-name your entities once the new integration is installed to fix any issues you may encounter.
+>
+>----
+>
 
 ## Manual Installation
 
