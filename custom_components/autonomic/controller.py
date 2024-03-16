@@ -170,7 +170,7 @@ class Controller:
             # Subscribe and catchup
             self.send('mrad.subscribeevents')
             self.send('mrad.getstatus')
-            self.send('subscribeeventsall')
+            self.send('subscribeevents')
             self.send('getstatus')
 
             self.send('mrad.browseallzones')
@@ -429,7 +429,7 @@ class Controller:
             for source in sourcesList:
                 fqn = source.get('@name', "")
                 if fqn == "":
-                    fqn = source['@fqn'].split("@")[0]
+                    fqn = source['@fqn'].split("@")[0].replace('_', ' ')
 
                 # Add that to the list of ALL sources for this (these) zone(s)
                 sources.append(fqn)
@@ -437,7 +437,7 @@ class Controller:
                 # And make sure that's correct in the event table
                 sid = source.get('@sId', "")
                 key = f'Source_{sid}.QualifiedSourceName'
-                self._events[key] = fqn
+                self._events[key] = fqn.replace(' ', '_')
 
             # Now set the available sources into the zone (zones)
             for vZone in group['vol']['zone']:
@@ -501,11 +501,12 @@ class Controller:
         # Schedule an update for the associated Zone(s)
         for zone in self._zoneEntities:
             if zone._mms_zone_id == entityId:
-                zone.schedule_update_ha_state()
+                zone.update_ha()
             elif zone._mms_source_id == entityId:
-                zone.schedule_update_ha_state()
+                zone.update_ha()
 
     def _process_instance_event(self, res):
+        #LOGGER.debug(f"<--{res}")
         # Parse...
         # StateChanged Player_A TrackTime=263
         splits = res.split(' ')
@@ -550,9 +551,9 @@ class Controller:
             # Schedule an update for the associated Zone(s)
             for zone in self._zoneEntities:
                 if zone._mms_zone_id == entityId:
-                    zone.schedule_update_ha_state()
+                    zone.update_ha()
                 elif zone._mms_source_id == entityId:
-                    zone.schedule_update_ha_state()
+                    zone.update_ha()
 
         else:
             for zone in self._zoneEntities:
@@ -561,5 +562,5 @@ class Controller:
                     val = self._events[key]
                     if val is not None:
                         if val == entityId:
-                            zone.schedule_update_ha_state()
+                            zone.update_ha()
 
