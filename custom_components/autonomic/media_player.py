@@ -1,6 +1,7 @@
 """Platform for media_player integration."""
 
 import logging
+import asyncio
 
 from homeassistant.components.media_player import (
     MediaPlayerDeviceClass,
@@ -9,6 +10,7 @@ from homeassistant.components.media_player import (
     MediaPlayerState,
     RepeatMode,
     MediaType,
+    async_process_play_media_url,
 
     ATTR_TO_PROPERTY
 )
@@ -20,6 +22,7 @@ from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.entity import Entity
 from homeassistant.helpers.entity_registry import RegistryEntryHider
+from homeassistant.components import media_source, spotify
 import homeassistant.helpers.entity_registry as er
 
 from . import controller
@@ -104,17 +107,23 @@ class MmsZone(MediaPlayerEntity):
         self._attr_volume_step: float
         """
 
+        self._attr_extra_state_attributes = {}
+        self._attr_extra_state_attributes["mode"] = controller._mode
+
+
         if controller._mode == MODE_MRAD:
             self._mms_zone_id = f"Zone_{int(indexOrName)}"
             self._mms_source_id = ""
             self._name = f"{controller._name} Zone {int(indexOrName):02d}"
             self._attr_unique_id = f"{entry.unique_id}_zone_{int(indexOrName):02d}"
+            self._attr_extra_state_attributes["zone_id"] = int(indexOrName)
 
         elif controller._mode == MODE_STANDALONE:
             self._mms_zone_id = None
             self._mms_source_id = f"{indexOrName}".replace(' ', '_')
             self._name = f"{controller._name} {indexOrName}"
             self._attr_unique_id = f"{entry.unique_id}_{indexOrName}"
+            self._attr_extra_state_attributes["instance_id"] = f"{indexOrName}"
 
         self._attr_device_info = DeviceInfo(
             identifiers={(DOMAIN, entry.unique_id)},
@@ -388,20 +397,6 @@ class MmsZone(MediaPlayerEntity):
 
         return sourceList
 
-    """
-    @property
-    def extra_state_attributes(self):
-        # Return extra state attributes
-        if self._isOn:
-            self._extra_attributes['input_index']=self._sourceIndex+1
-            self._extra_attributes['input_has_signal']= (self._controller._inputSignals[self._sourceIndex]==1)
-        else:
-            self._extra_attributes['input_index']=0
-            self._extra_attributes['input_has_signal']= False
-
-        # Useful for making sensors
-        return self._extra_attributes """
-
     @property
     def media_content_type(self) -> MediaType | str | None:
         # Content type of current playing media.
@@ -580,6 +575,12 @@ class MmsZone(MediaPlayerEntity):
 
     # === HASS METHODS ==========================================================================================================
 
+    def select_source(self, source) -> None:
+        # Select input source.
+        if self._controller._mode == MODE_MRAD:
+            self._controller.send(f'mrad.SetZone "{self._mms_zone_id}"')
+            self._controller.send(f'mrad.SetSource "{source}"')
+
     def mute_volume(self, mute) -> None:
         # Mute the volume.
         if mute:
@@ -594,13 +595,6 @@ class MmsZone(MediaPlayerEntity):
             self._controller.send(f'setInstance "{self._mms_source_id}"')
             self._controller.send(f'mute {newState}')
 
-    """
-    async def async_select_source(self, source):
-        # Select input source.
-        index = self._controller.video_inputs.index(source)+1
-        await self._controller.async_send(f"SET OUT{self._index} {self._output_type}S IN{index}")
-    """
-
     def turn_on(self) -> None:
         # Turn the media player on.
         if self._controller._mode == MODE_MRAD:
@@ -610,24 +604,6 @@ class MmsZone(MediaPlayerEntity):
         # Turn the media player off.
         if self._controller._mode == MODE_MRAD:
             self._controller.send(f'mrad.power off "{self._mms_zone_id}"')
-
-    def media_previous_track(self) -> None:
-        # Send previous track command.
-        if self._controller._mode == MODE_MRAD:
-            self._controller.send(f'mrad.SetZone "{self._mms_zone_id}"')
-            self._controller.send('mrad.SkipPrevious')
-        else:
-            self._controller.send(f'setInstance "{self._mms_source_id}"')
-            self._controller.send('SkipPrevious')
-
-    def media_next_track(self) -> None:
-        # Send next track command.
-        if self._controller._mode == MODE_MRAD:
-            self._controller.send(f'mrad.SetZone "{self._mms_zone_id}"')
-            self._controller.send('mrad.SkipNext')
-        else:
-            self._controller.send(f'setInstance "{self._mms_source_id}"')
-            self._controller.send('SkipNext')
 
     def set_repeat(self, repeat: RepeatMode) -> None:
         # Set repeat mode.
@@ -701,4 +677,128 @@ class MmsZone(MediaPlayerEntity):
 
             self._controller.send(f'setInstance "{self._mms_source_id}"')
             self._controller.send('VolumeDown')
+
+    def media_play(self) -> None:
+        # Send play command.
+        if self._controller._mode == MODE_MRAD:
+            self._controller.send(f'mrad.SetZone "{self._mms_zone_id}"')
+            self._controller.send('mrad.play')
+        else:
+            self._controller.send(f'setInstance "{self._mms_source_id}"')
+            self._controller.send('play')
+
+    def media_pause(self) -> None:
+        # Send pause command.
+        if self._controller._mode == MODE_MRAD:
+            self._controller.send(f'mrad.SetZone "{self._mms_zone_id}"')
+            self._controller.send('mrad.pause')
+        else:
+            self._controller.send(f'setInstance "{self._mms_source_id}"')
+            self._controller.send('pause')
+
+    def media_stop(self) -> None:
+        # Send stop command.
+        if self._controller._mode == MODE_MRAD:
+            self._controller.send(f'mrad.SetZone "{self._mms_zone_id}"')
+            self._controller.send('mrad.stop')
+        else:
+            self._controller.send(f'setInstance "{self._mms_source_id}"')
+            self._controller.send('stop')
+
+    def media_previous_track(self) -> None:
+        # Send previous track command.
+        if self._controller._mode == MODE_MRAD:
+            self._controller.send(f'mrad.SetZone "{self._mms_zone_id}"')
+            self._controller.send('mrad.SkipPrevious')
+        else:
+            self._controller.send(f'setInstance "{self._mms_source_id}"')
+            self._controller.send('SkipPrevious')
+
+    def media_next_track(self) -> None:
+        # Send next track command.
+        if self._controller._mode == MODE_MRAD:
+            self._controller.send(f'mrad.SetZone "{self._mms_zone_id}"')
+            self._controller.send('mrad.SkipNext')
+        else:
+            self._controller.send(f'setInstance "{self._mms_source_id}"')
+            self._controller.send('SkipNext')
+
+    def media_seek(self, position: float) -> None:
+        # Send seek command.
+        if self._controller._mode == MODE_MRAD:
+            self._controller.send(f'mrad.SetZone "{self._mms_zone_id}"')
+            self._controller.send('mrad.SetSource')
+        else:
+            self._controller.send(f'SetInstance "{self._mms_source_id}"')
+
+        self._controller.send(f'seek {int(position)}')
+
+        # Invalidate TrackTime so it gets updated next report
+        self._controller.pop_event(self._mms_source_id,'TrackTime')
+
+        sourceId = self._controller.get_event(self._mms_source_id, 'QualifiedSourceName')
+        if sourceId is not None:
+            sourceId = sourceId.split("@")[0]
+            self._controller.pop_event(sourceId,'TrackTime')
+
+    def clear_playlist(self):
+        # Clear players playlist.
+        if self._controller._mode == MODE_MRAD:
+            self._controller.send(f'mrad.SetZone "{self._mms_zone_id}"')
+            self._controller.send('mrad.SetSource')
+        else:
+            self._controller.send(f'SetInstance "{self._mms_source_id}"')
+
+        self._controller.send('ClearNowPlaying false')
+
+    def play_media(self, media_type, media_id, **kwargs):
+        # Play a piece of media.
+
+        LOGGER.debug(f"play_media( {media_type}, {media_id}, {kwargs}")
+        announce = False
+        if ("announce" in kwargs):
+            announce = kwargs["announce"]
+
+        LOGGER.debug(f"announce = {announce}")
+
+        # <ServiceCall media_player.play_media: media_content_type=music, media_content_id=http://192.168.13.91:8123/api/tts_proxy/74a4297365735b6c107b85e034347ce013eeae01_en_-_google.mp3, entity_id=['media_player.mt_office']>
+        if self._controller._mode == MODE_MRAD:
+            self._controller.send(f'mrad.SetZone "{self._mms_zone_id}"')
+            self._controller.send('mrad.SetSource')
+        else:
+            self._controller.send(f'SetInstance "{self._mms_source_id}"')
+
+        media_type = media_type.lower()
+
+        if media_source.is_media_source_id(media_id):
+            media_type = "music"
+            media_id = (
+                asyncio.run_coroutine_threadsafe(
+                    media_source.async_resolve_media(
+                        self._hass, media_id, self.entity_id
+                    ),
+                    self._hass.loop,
+                )
+                .result()
+                .url
+            )
+            media_id = async_process_play_media_url(self._hass, media_id)
+
+        if announce:
+            self._controller.send(f'DuckPlay "{media_id}"')
+            return
+
+        if media_type == "music":
+            self._controller.send(f'DuckPlay "{media_id}"')
+        elif media_type == "scene":
+            self._controller.send(f'RecallScene "{media_id}"')
+        elif media_type == "preset":
+            self._controller.send(f'RecallPreset "{media_id}"')
+        elif media_type == "radiostation":
+            self._controller.send(f'PlayRadioStation "{media_id}"')
+        elif media_type == "command":
+            self._controller.send(f'{media_id}')
+        else:
+            LOGGER.error(f"play_media:Unexpected media_type='{media_type}'")
+
 

@@ -286,12 +286,16 @@ class Controller:
         self._cmd_queue.put_nowait(cmd)
 
     def get_event(self, entityId, eventName):
-
         key = f'{entityId}.{eventName}'
         if key not in self._events:
             return None
         else:
             return self._events[key]
+
+    def pop_event(self, entityId, eventName):
+        key = f'{entityId}.{eventName}'
+        return self._events.pop(key, None)
+
 
     def _process_response(self, res):
         try:
@@ -478,10 +482,8 @@ class Controller:
         # then only once every TICK_UPDATE_SECONDS
         if eventName == 'TrackTime':
             eventValue = eventValue.replace("00:00:00", "0")
-            if key in self._events:
-                if int(eventValue) > TICK_THRESHOLD_SECONDS:
-                    if int(eventValue) % TICK_UPDATE_SECONDS != 0:
-                        return
+            if key in self._events and int(eventValue) > TICK_THRESHOLD_SECONDS and int(eventValue) % TICK_UPDATE_SECONDS != 0:
+                return
 
         self._events[key]=eventValue
 
@@ -522,10 +524,8 @@ class Controller:
         # then only once every TICK_UPDATE_SECONDS
         if eventName == 'TrackTime':
             eventValue = eventValue.replace("00:00:00", "0")
-            if key in self._events:
-                if int(eventValue) > TICK_THRESHOLD_SECONDS:
-                    if int(eventValue) % TICK_UPDATE_SECONDS != 0:
-                        return
+            if key in self._events and int(eventValue) > TICK_THRESHOLD_SECONDS and int(eventValue) % TICK_UPDATE_SECONDS != 0:
+                return
 
         self._events[key]=eventValue
 
@@ -545,7 +545,7 @@ class Controller:
         if self._mode == MODE_STANDALONE:
             # Shortcut to better art
             if eventName == 'MediaArtChanged':
-                self.send('browseinstances')
+                self.send('BrowseInstances')
                 return
 
             # Schedule an update for the associated Zone(s)

@@ -17,4 +17,4 @@ RETRY_CONNECT_SECONDS: Final= 30
 PING_INTERVAL:Final         = timedelta(seconds=10)
 
 TICK_THRESHOLD_SECONDS: Final =  5
-TICK_UPDATE_SECONDS: Final    = 30
+TICK_UPDATE_SECONDS: Final    =  4
