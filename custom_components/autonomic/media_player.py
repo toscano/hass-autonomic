@@ -581,20 +581,6 @@ class MmsZone(MediaPlayerEntity):
             self._controller.send(f'mrad.SetZone "{self._mms_zone_id}"')
             self._controller.send(f'mrad.SetSource "{source}"')
 
-    def mute_volume(self, mute) -> None:
-        # Mute the volume.
-        if mute:
-            newState = "on"
-        else:
-            newState = "off"
-
-        if self._controller._mode == MODE_MRAD:
-            self._controller.send(f'mrad.SetZone "{self._mms_zone_id}"')
-            self._controller.send(f'mrad.mute {newState}')
-        else:
-            self._controller.send(f'setInstance "{self._mms_source_id}"')
-            self._controller.send(f'mute {newState}')
-
     def turn_on(self) -> None:
         # Turn the media player on.
         if self._controller._mode == MODE_MRAD:
@@ -629,6 +615,23 @@ class MmsZone(MediaPlayerEntity):
             self._controller.send(f'setInstance "{self._mms_source_id}"')
             self._controller.send(f'Shuffle {shuffle}')
 
+    def mute_volume(self, mute) -> None:
+        # Mute the volume.
+        if mute:
+            newState = "on"
+        else:
+            newState = "off"
+
+        if self._controller._mode == MODE_MRAD:
+            if self._controller.perform_group_volumes:
+                self._controller.send(f'mrad.mute {newState} "{self._mms_groupGuid}"')
+            else:
+                self._controller.send(f'mrad.SetZone "{self._mms_zone_id}"')
+                self._controller.send(f'mrad.mute {newState}')
+        else:
+            self._controller.send(f'setInstance "{self._mms_source_id}"')
+            self._controller.send(f'mute {newState}')
+
     def set_volume_level(self, volume: float) -> None:
         # Set volume level, range 0..1.
         if self._controller._mode == MODE_MRAD:
@@ -639,8 +642,11 @@ class MmsZone(MediaPlayerEntity):
 
             volume = int( float(volume) * float(maxVolume) )
 
-            self._controller.send(f'mrad.SetZone "{self._mms_zone_id}"')
-            self._controller.send(f'mrad.volume {volume}')
+            if self._controller.perform_group_volumes:
+                self._controller.send(f'mrad.volume {volume} "{self._mms_groupGuid}"')
+            else:
+                self._controller.send(f'mrad.SetZone "{self._mms_zone_id}"')
+                self._controller.send(f'mrad.volume {volume}')
         else:
             gainMode = self._controller.get_event(self._mms_zone_id, 'GainMode')
             if gainMode is not None and gainMode == 'Fixed':
@@ -655,8 +661,11 @@ class MmsZone(MediaPlayerEntity):
     async def async_volume_up(self) -> None:
         """Volume up the media player."""
         if self._controller._mode == MODE_MRAD:
-            self._controller.send(f'mrad.SetZone "{self._mms_zone_id}"')
-            self._controller.send('mrad.VolumeUp')
+            if self._controller.perform_group_volumes:
+                self._controller.send(f'mrad.VolumeUp "{self._mms_groupGuid}"')
+            else:
+                self._controller.send(f'mrad.SetZone "{self._mms_zone_id}"')
+                self._controller.send('mrad.VolumeUp')
         else:
             gainMode = self._controller.get_event(self._mms_zone_id, 'GainMode')
             if gainMode is not None and gainMode == 'Fixed':
@@ -668,8 +677,11 @@ class MmsZone(MediaPlayerEntity):
     async def async_volume_down(self) -> None:
         """Volume down the media player."""
         if self._controller._mode == MODE_MRAD:
-            self._controller.send(f'mrad.SetZone "{self._mms_zone_id}"')
-            self._controller.send('mrad.VolumeDown')
+            if self._controller.perform_group_volumes:
+                self._controller.send(f'mrad.VolumeDown "{self._mms_groupGuid}"')
+            else:
+                self._controller.send(f'mrad.SetZone "{self._mms_zone_id}"')
+                self._controller.send('mrad.VolumeDown')
         else:
             gainMode = self._controller.get_event(self._mms_zone_id, 'GainMode')
             if gainMode is not None and gainMode == 'Fixed':

@@ -42,8 +42,11 @@ class Controller:
 
         self._zoneEntities = []
         self._zoneEntitiesByGuid = {}
+        self._switchEntities = []
         self.is_connected = False
         self._events = {}
+
+        self.perform_group_volumes = False
 
 
     async def async_check_connection(self) -> bool:
@@ -134,6 +137,9 @@ class Controller:
         for zone in self._zoneEntities:
             zone.update_ha()
 
+        for switch in self._switchEntities:
+            switch.update_ha()
+
         # Now open the socket
         workToDo = True
         while workToDo:
@@ -181,6 +187,8 @@ class Controller:
 
         LOGGER.info(f"Connected to {self._host}:{self._port}")
         self.is_connected = True
+        for switch in self._switchEntities:
+            switch.update_ha()
 
         return
 
@@ -279,7 +287,9 @@ class Controller:
 
     def add_zone_entity(self, zone) -> None:
         self._zoneEntities.append(zone)
-        return
+
+    def add_switch_entity(self, switch) -> None:
+        self._switchEntities.append(switch)
 
     def send(self, cmd):
         LOGGER.debug(f"-->{cmd}")
