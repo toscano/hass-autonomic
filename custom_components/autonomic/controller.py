@@ -109,6 +109,7 @@ class Controller:
                     for output in mmsJson["Outputs"]:
                         if output["IsEnabled"]:
                             self._instances.append(output["Name"])
+                            LOGGER.debug(f"FOUND Instance {output["Name"]}")
                 elif item["DeviceType"] == "AMP":
                     self._mode = MODE_MRAD
                     LOGGER.debug(f"Found {item['DeviceType']} - {item['DeviceModel']} - {item['Zones']}")
@@ -117,6 +118,9 @@ class Controller:
                     t = int(splits[1])+1
                     for i in range(f,t):
                         self._zones.append(i)
+
+        # Uncomment this to force STANDALONE mode
+        # self._mode = MODE_STANDALONE
 
         self._zones.sort()
         LOGGER.debug("async_check_connections succeeded.")
@@ -179,6 +183,7 @@ class Controller:
             self.send('subscribeevents')
             self.send('getstatus')
 
+            self.send('browseinstances')
             self.send('mrad.browseallzones')
             self.send('mrad.browsezonegroups')
 
@@ -319,12 +324,13 @@ class Controller:
                 self._process_mrad_zone_group_response(s)
             elif s.startswith('MRAD.'):
                 self._process_mrad_event(s)
-            #elif s.startswith('<Instances'):
-            #    self._process_standalone_instance_response(s)
+            elif s.startswith('<Instances'):
+                self._process_instance_response(s)
             elif s.startswith('ReportState') or s.startswith('StateChanged'):
                 self._process_instance_event(s)
+
             #else:
-            #    _LOGGER.info("%s:unprocessed<--%s", self.host, s)
+            #    LOGGER.info(f"{self._host}:unprocessed<--{s}")
 
             return s
 
@@ -573,4 +579,69 @@ class Controller:
                     if val is not None:
                         if val == entityId:
                             zone.update_ha()
+
+    def _process_instance_response(self, res):
+        data = xmltodict.parse(res, force_list=('Instance',))
+
+        if data['Instances']['@total'] == '0':
+            LOGGER.warn(f"Total Instances={data['Instances']['@total']} with mode={self._mode}.")
+
+        #  There's a chance that the Zone count is zero... That's handled as an exception/reconnect
+        for instance in data['Instances']['Instance']:
+            # <Instances total="1" start="1" more="false" art="false" alpha="false" displayAs="List">
+            #    <Instance  name="Player_A"
+            #               friendlyName="Player A"
+            #               fqn="Player_A@D46A9160066E"
+            #               dna="name"
+            #               supports="MrledvpScbF"
+            #               m1="Pandora: Diana Krall Radio"
+            #               m2="Emilie-Claire Barlow"
+            #               m3="Seule Ce Soir"
+            #               m4="Seule Ce Soir"
+            #               mArt="http://192.168.1.80:5005/GetArt?instance=Player_A@D46A9160066E&amp;ticks=638091505856194880&amp;guid={ab4bad9c-6f12-4a61-7466-85832dbc940c}"
+            #               gainMode="Fixed" />
+            # </Instances>
+            guid    = instance['@fqn']
+            sourceId= instance['@name']
+
+            m1      = instance['@m1']
+            self._events[f'{sourceId}.MetaData1']=m1
+
+            m2      = instance['@m2']
+            self._events[f'{sourceId}.MetaData2']=m2
+
+            m3      = instance['@m3']
+            self._events[f'{sourceId}.MetaData3']=m3
+
+            m4      = instance['@m4']
+            self._events[f'{sourceId}.MetaData4']=m4
+
+            mArt    = instance['@mArt']
+            self._events[f'{sourceId}.mArt']=mArt
+
+
+            if self._mode == MODE_STANDALONE:
+                name    = instance['@friendlyName']
+                id      = instance['@name']
+
+                if guid in self._zoneEntitiesByGuid:
+                    found = self._zoneEntitiesByGuid[guid]
+                    found.update_ha()
+                else:
+                    # standalone zone
+                    found = None
+                    for zone in self._zoneEntities:
+                        if zone._mms_zone_id == id:
+                            LOGGER.info(f"DISCOVERED STANDALONE ZONE: {id} {name}")
+                            found = zone
+                            break
+
+                if found is not None:
+                    self._zoneEntitiesByGuid[guid] = found
+                    found.set_name_source_and_group( newName = name, newSourceId = sourceId )
+                    found.update_ha
+
+
+
+
 
