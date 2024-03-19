@@ -109,6 +109,7 @@ class MmsZone(MediaPlayerEntity):
 
         self._attr_extra_state_attributes = {}
         self._attr_extra_state_attributes["mode"] = controller._mode
+        self._attr_group_members = []
 
 
         if controller._mode == MODE_MRAD:
@@ -141,7 +142,7 @@ class MmsZone(MediaPlayerEntity):
         except Exception as error:  # pylint: disable=broad-except
             LOGGER.debug("State update failed.")
 
-    def set_name_source_and_group(self, newName: str | None = None, newSourceId: str | None = None, newGroupGuid: str | None = None, newGroupName: str | None = None):
+    def set_name_source_and_group(self, newName: str | None = None, newSourceId: str | None = None, newGroupGuid: str | None = None, newGroupName: str | None = None, newGroupMembers = None):
 
         isDirty = False
 
@@ -166,6 +167,11 @@ class MmsZone(MediaPlayerEntity):
 
         if newGroupName is not None:
             self._mms_groupName = newGroupName
+
+        if newGroupMembers is not None and self._attr_group_members != newGroupMembers:
+            self._attr_group_members = newGroupMembers
+            isDirty = True
+
 
         if isDirty:
             self.update_ha()
@@ -352,7 +358,10 @@ class MmsZone(MediaPlayerEntity):
                     MediaPlayerEntityFeature.SELECT_SOURCE   | \
                     MediaPlayerEntityFeature.CLEAR_PLAYLIST
 
-            if self._controller._mode == MODE_STANDALONE:
+            if self._controller._mode == MODE_MRAD:
+                s = s | MediaPlayerEntityFeature.GROUPING
+
+            elif self._controller._mode == MODE_STANDALONE:
                 s = s & ~MediaPlayerEntityFeature.TURN_ON & ~MediaPlayerEntityFeature.TURN_OFF & ~MediaPlayerEntityFeature.SELECT_SOURCE
 
                 gainMode = self.GetSourceEvent('GainMode')
@@ -574,6 +583,25 @@ class MmsZone(MediaPlayerEntity):
 
 
     # === HASS METHODS ==========================================================================================================
+    def join_players(self, group_members):
+        # Join `group_members` as a player group with the current player.
+        LOGGER.debug(f"join_players: {self._mms_zone_id} asked to join group {group_members}")
+
+        if (self._isOn == False):
+            self.turn_on()
+            self.select_source( "Source_2000")
+            self._mms_source_id = "Source_2000"
+
+        for member in group_members:
+            other = self._controller.GetZoneByEntityId(member)
+            if other is not None:
+                LOGGER.debug(f"{self.entity_id} with source={self._mms_source_id} found other={other.entity_id} with source={other._mms_source_id} ")
+                other.turn_on()
+                other.select_source( self._mms_source_id )
+
+    def unjoin_player(self):
+        """Remove this player from any group."""
+        self.turn_off()
 
     def select_source(self, source) -> None:
         # Select input source.

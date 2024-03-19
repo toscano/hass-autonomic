@@ -127,6 +127,15 @@ class Controller:
 
         return True
 
+    def GetZoneByEntityId(self, id: str):
+        rVal = None
+
+        for zone in self._zoneEntities:
+            if zone.entity_id == id:
+                rVal = zone
+                break
+
+        return rVal
 
     async def async_connect_to_mms(self) -> None:
         """
@@ -415,6 +424,9 @@ class Controller:
             #         <Source guid="000027f5-5ace-e5da-ba88-8cf58dd178f2" name="CD120-1" dna="name" isSearchable="false" fqn="" smart="0" next="0" sId="10101" iconId="Source" />
             #     </Sources>
             # </ZoneGroup>
+            zoneEntitiesInGroup = []
+            zoneEntityIdsInGroup= []
+
             groupGuid= group.get('@guid', "")
             groupName= group.get('@name', "")
             sId      = group.get('@sId', "0")
@@ -471,6 +483,9 @@ class Controller:
                 if guid in self._zoneEntitiesByGuid:
                     found = self._zoneEntitiesByGuid[guid]
                     found.set_name_source_and_group( newName = name, newSourceId = sourceId, newGroupGuid = groupGuid, newGroupName = groupName )
+                    if not found.entity_id in zoneEntityIdsInGroup:
+                        zoneEntitiesInGroup.append(found)
+                        zoneEntityIdsInGroup.append(found.entity_id)
                 else:
                     found = None
                     for zone in self._zoneEntities:
@@ -481,6 +496,13 @@ class Controller:
                     if found is not None:
                         self._zoneEntitiesByGuid[guid] = found
                         found.set_name_source_and_group( newName = name, newSourceId = sourceId, newGroupGuid = groupGuid, newGroupName = groupName )
+                        if not found.entity_id in zoneEntityIdsInGroup:
+                            zoneEntitiesInGroup.append(found)
+                            zoneEntityIdsInGroup.append(found.entity_id)
+
+            zoneEntityIdsInGroup.sort()
+            for zoneEntity in zoneEntitiesInGroup:
+                zoneEntity.set_name_source_and_group( newGroupMembers = zoneEntityIdsInGroup )
 
     def _process_mrad_event(self, res):
         # Parse...
