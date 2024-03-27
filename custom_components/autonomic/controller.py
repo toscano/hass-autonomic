@@ -20,6 +20,7 @@ from homeassistant.helpers.aiohttp_client import async_get_clientsession
 import homeassistant.util.dt as dt_util
 
 from .const import DOMAIN, MIN_VERSION_REQUIRED, MODE_UNKNOWN,  MODE_STANDALONE, MODE_MRAD, RETRY_CONNECT_SECONDS, PING_INTERVAL, TICK_THRESHOLD_SECONDS, TICK_UPDATE_SECONDS
+from .mms_client import MmsClient
 
 LOGGER = logging.getLogger(__package__)
 
@@ -47,6 +48,8 @@ class Controller:
         self._events = {}
 
         self.perform_group_volumes = False
+        self.mms_client = MmsClient(self._hass, self._host, self._port, "*", self)
+        self.mms_instance_clients = {}
 
 
     async def async_check_connection(self) -> bool:
@@ -127,205 +130,49 @@ class Controller:
 
         return True
 
-    def GetZoneByEntityId(self, id: str):
-        rVal = None
+    def mms_connected(self, mms : MmsClient, connected_flag: bool) ->None:
+        LOGGER.debug(f"{mms._inst}: Connected {connected_flag}")
 
-        for zone in self._zoneEntities:
-            if zone.entity_id == id:
-                rVal = zone
-                break
-
-        return rVal
-
-    async def async_connect_to_mms(self) -> None:
-        """
-        Connect to the server and start processing responses.
-        """
-        self._closing = False
-        self.is_connected = False
-        self._last_inbound_data_utc = dt_util.utcnow()
-        self._sent_ping = 0
-
-        # If we have any Zones... get them to update their state to OFFLINE
-        for zone in self._zoneEntities:
-            zone.update_ha()
+        self.is_connected = connected_flag
 
         for switch in self._switchEntities:
             switch.update_ha()
 
-        # Now open the socket
-        workToDo = True
-        while workToDo:
-            try:
-                if self._closing:
-                    return
+        if mms._inst == "*":
+            self._events = {}
 
-                LOGGER.info(f"Connecting to {self._host}:{self._port}")
+        if connected_flag:
 
-                reader, writer = await asyncio.open_connection(self._host, self._port)
-                workToDo = False
-            except:
-                LOGGER.warn(f"Connection to {self._host}:{self._port} failed... will try again in {RETRY_CONNECT_SECONDS} seconds.")
-                await asyncio.sleep(RETRY_CONNECT_SECONDS)
+            mms.send('setclienttype hass')
+            mms.send('setxmlmode lists')
 
-        # reset the pending commands
-        self._cmd_queue = asyncio.Queue()
+            if mms._inst == "*":
+                # The order is important here!
+                # Get the events FIRST so values wont be None.
+                if self._mode == MODE_STANDALONE:
+                    mms.send('browseinstances')
+                else:
+                    # Subscribe and catchup
+                    mms.send('mrad.subscribeevents')
+                    mms.send('mrad.getstatus')
 
-        self._events = {}
+                    mms.send('browseinstances')
+                    mms.send('mrad.browseallzones')
+                    mms.send('mrad.browsezonegroups')
 
-        # Get the Zone structure
-        self.send('setclienttype hass')
-        self.send('setxmlmode lists')
-
-        # The order is important here!
-        # Get the events FIRST so values wont be None.
-        if self._mode == MODE_STANDALONE:
-            # Subscribe and catchup
-            self.send('subscribeevents')
-            self.send('getstatus')
-
-            self.send('browseinstances')
-        else:
-            # Subscribe and catchup
-            self.send('mrad.subscribeevents')
-            self.send('mrad.getstatus')
-            self.send('subscribeevents')
-            self.send('getstatus')
-
-            self.send('browseinstances')
-            self.send('mrad.browseallzones')
-            self.send('mrad.browsezonegroups')
+            else:
+                mms.send(f'setinstance {mms._inst}')
+                mms.send('subscribeevents')
+                mms.send('getstatus')
 
 
-        self.async_io_loop_future = asyncio.ensure_future(self.async_io_loop(reader, writer))
-
-        LOGGER.info(f"Connected to {self._host}:{self._port}")
-        self.is_connected = True
-        for switch in self._switchEntities:
-            switch.update_ha()
-
-        return
-
-    async def async_io_loop(self, reader, writer):
-
-        self._queue_future = asyncio.ensure_future(self._cmd_queue.get())
-
-        self._net_future = asyncio.ensure_future(reader.readline())
+    async def async_mms_process_response(self, mms: MmsClient, res: Any) -> None:
 
         try:
-
-            while True:
-
-                done, pending = await asyncio.wait(
-                        [self._queue_future, self._net_future],
-                        return_when=asyncio.FIRST_COMPLETED)
-
-                if self._closing:
-                    writer.close()
-                    self._queue_future.cancel()
-                    self._net_future.cancel()
-                    LOGGER.info(f"IO loop with {self._host}:{self._port} exited for local close")
-                    return
-
-                if self._net_future in done:
-
-                    if reader.at_eof():
-                        self._queue_future.cancel()
-                        self._net_future.cancel()
-                        LOGGER.info(f"IO loop with {self._host}:{self._port} exited for remote close...")
-                        return
-
-                    response = self._net_future.result()
-                    self._last_inbound_data_utc = dt_util.utcnow()
-                    try:
-                        self._process_response(response)
-                    except:
-                        pass
-
-                    self._net_future = asyncio.ensure_future(reader.readline())
-
-                if self._queue_future in done:
-                    cmd = self._queue_future.result()
-                    #LOGGER.info("%s:--> %s", self.host, cmd)
-                    cmd += '\r'
-                    writer.write(bytearray(cmd, 'utf-8'))
-                    await writer.drain()
-
-                    self._queue_future = asyncio.ensure_future(self._cmd_queue.get())
-
-            LOGGER.debug(f"IO loop with {self._host}:{self._port} exited")
-
-        except GeneratorExit:
-            return
-
-        except asyncio.CancelledError:
-            LOGGER.debug(f"IO loop with {self._host}:{self._port} cancelled")
-            writer.close()
-            self._queue_future.cancel()
-            self._net_future.cancel()
-            raise
-        except:
-            LOGGER.exception(f"Unhandled exception in IO loop with {self._host}:{self._port}")
-            raise
-
-
-    async def async_disconnect_from_mms(self) -> None:
-        LOGGER.info(f"Closing connection to {self._host}:{self._port}")
-        self._closing = True
-        self._queue_future.cancel()
-
-    async def async_check_ping(self, now=None):
-        """Maybe send a ping."""
-        if (self.is_connected == False or self._closing):
-            return
-
-        if (self._last_inbound_data_utc + PING_INTERVAL + PING_INTERVAL < dt_util.utcnow() ):
-
-            if (self._sent_ping > 2):
-                # Schedule a re-connect...
-                LOGGER.error(f"PING...{self._host} reconnect needed.")
-                self._sent_ping = 0
-                self.is_connected = False
-                self._hass.async_add_job(self.async_connect_to_mms())
-                return
-            self._sent_ping = self._sent_ping + 1
-            if (self._sent_ping > 1):
-                LOGGER.debug(f"PING...{self._host} sending ping {self._sent_ping}")
-            self.send("ping")
-        elif (self._sent_ping > 0):
-            if (self._sent_ping > 1):
-                LOGGER.debug(f"PING...{self._host} resetting ping {self._last_inbound_data_utc}")
-            self._sent_ping = 0
-
-
-
-    def add_zone_entity(self, zone) -> None:
-        self._zoneEntities.append(zone)
-
-    def add_switch_entity(self, switch) -> None:
-        self._switchEntities.append(switch)
-
-    def send(self, cmd):
-        LOGGER.debug(f"-->{cmd}")
-        self._cmd_queue.put_nowait(cmd)
-
-    def get_event(self, entityId, eventName):
-        key = f'{entityId}.{eventName}'
-        if key not in self._events:
-            return None
-        else:
-            return self._events[key]
-
-    def pop_event(self, entityId, eventName):
-        key = f'{entityId}.{eventName}'
-        return self._events.pop(key, None)
-
-
-    def _process_response(self, res):
-        try:
-
             s = str(res, 'utf-8').strip()
-            # _LOGGER.debug("%s:<--%s", self.host, s)
+
+            #if (mms._inst != "*"):
+            #    LOGGER.debug(f"{mms._inst}:<--{s}")
 
             if s.startswith('<Zones'):
                 self._process_mrad_zone_response(s)
@@ -334,7 +181,7 @@ class Controller:
             elif s.startswith('MRAD.'):
                 self._process_mrad_event(s)
             elif s.startswith('<Instances'):
-                self._process_instance_response(s)
+                await self._async_process_instance_response(s)
             elif s.startswith('ReportState') or s.startswith('StateChanged'):
                 self._process_instance_event(s)
 
@@ -347,6 +194,68 @@ class Controller:
             LOGGER.exception(f"_process_response ex {e}")
             # some error occurred, re-connect may fix that
             self.send('quit')
+
+
+    async def async_connect_to_mms(self) -> None:
+        """
+        Connect to the server and start processing responses.
+        """
+        self.is_connected = False
+
+        # If we have any Zones... get them to update their state to OFFLINE
+        for zone in self._zoneEntities:
+            zone.update_ha()
+
+        for switch in self._switchEntities:
+            switch.update_ha()
+
+        # Now open the socket
+        self.mms_instance_clients = {}
+        await self.mms_client.async_connect()
+
+
+    async def async_disconnect_from_mms(self) -> None:
+        await self.mms_client.async_disconnect()
+        for k,v in self.mms_instance_clients.items():
+            await v.async_disconnect()
+
+    async def async_check_ping(self, now=None):
+        """Maybe send a ping."""
+        await self.mms_client.async_check_ping()
+        for k,v in self.mms_instance_clients.items():
+            await v.async_check_ping()
+
+    def send(self, cmd):
+        self.mms_client.send(cmd)
+
+
+    def GetZoneByEntityId(self, id: str):
+        rVal = None
+
+        for zone in self._zoneEntities:
+            if zone.entity_id == id:
+                rVal = zone
+                break
+
+        return rVal
+
+    def add_zone_entity(self, zone) -> None:
+        self._zoneEntities.append(zone)
+
+    def add_switch_entity(self, switch) -> None:
+        self._switchEntities.append(switch)
+
+    def get_event(self, entityId, eventName):
+        key = f'{entityId}.{eventName}'
+        if key not in self._events:
+            return None
+        else:
+            return self._events[key]
+
+    def pop_event(self, entityId, eventName):
+        key = f'{entityId}.{eventName}'
+        return self._events.pop(key, None)
+
 
     def _process_mrad_zone_response(self, res):
         """Response to BrowseAllZones"""
@@ -444,7 +353,7 @@ class Controller:
                 self._events[f'{sourceId}.TrackTimeUtc' ]=None
                 self._events[f'{sourceId}.Shuffle'      ]=None
                 self._events[f'{sourceId}.SmartSource'  ]=False
-                self._events[f'{sourceId}.MediaControl' ]='Unknown'
+                #self._events[f'{sourceId}.MediaControl' ]=None
             else:
                 self._events[f'{sourceId}.mArt'         ]=mArt
                 self._events[f'{sourceId}.SmartSource'  ]=True
@@ -595,14 +504,21 @@ class Controller:
 
         else:
             for zone in self._zoneEntities:
-                key = f'{zone._mms_source_id}.QualifiedSourceName'
-                if key in self._events:
-                    val = self._events[key]
-                    if val is not None:
-                        if val == entityId:
-                            zone.update_ha()
+                if zone._mms_source_id == entityId:
+                    zone.update_ha()
+                else:
+                    key = f'{zone._mms_source_id}.QualifiedSourceName'
+                    if key in self._events:
+                        val = self._events[key]
+                        if val is not None:
+                            if val == entityId:
+                                zone.update_ha()
 
-    def _process_instance_response(self, res):
+
+
+
+    async def _async_process_instance_response(self, res):
+
         data = xmltodict.parse(res, force_list=('Instance',))
 
         if data['Instances']['@total'] == '0':
@@ -661,7 +577,17 @@ class Controller:
                 if found is not None:
                     self._zoneEntitiesByGuid[guid] = found
                     found.set_name_source_and_group( newName = name, newSourceId = sourceId )
-                    found.update_ha
+                    found.update_ha()
+
+            else:
+                if not guid in self.mms_instance_clients:
+                    ig = MmsClient(self._hass, self._host, self._port, sourceId, self )
+                    self.mms_instance_clients[guid] = ig
+                    await ig.async_connect()
+
+                for zone in self._zoneEntities:
+                    if zone._mms_source_id == sourceId:
+                        found.update_ha()
 
 
 

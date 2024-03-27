@@ -177,7 +177,7 @@ class MmsZone(MediaPlayerEntity):
             self.update_ha()
 
     def GetSourceEvent(self, event_id : str ) -> str | None:
-        debug = False #event_id in ['TrackDuration', 'TrackTime']
+        debug = False #self._mms_zone_id=="Zone_8"  and event_id in ['SmartSource', 'MediaControl'] #, 'TrackDuration', 'TrackTime']
 
         if self._controller.is_connected:
             if debug:
