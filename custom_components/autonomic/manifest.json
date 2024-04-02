@@ -12,5 +12,5 @@
   "requirements": ["xmltodict"],
   "ssdp": [],
   "zeroconf": ["_ac-mcs._tcp.local."],
-  "version": "2024.03.0"
+  "version": "2024.04.0"
 }
