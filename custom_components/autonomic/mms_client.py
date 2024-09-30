@@ -83,7 +83,7 @@ class MmsClient:
                 LOGGER.error(f"{self._inst}:PING...{self._host} reconnect needed.")
                 self._sent_ping = 0
                 self.is_connected = False
-                self._hass.async_add_job(self.async_connect())
+                self._hass.async_create_task(self.async_connect(), "MMS re-connect required.")
                 return
             self._sent_ping = self._sent_ping + 1
             if (self._sent_ping > 1):

@@ -47,7 +47,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     ## It's done by calling the `async_setup_entry` function in each platform module.
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
 
-    hass.async_add_job(client.async_connect_to_mms())
+    hass.async_create_task(client.async_connect_to_mms(), f"Connect to MMS w/ ID: {entry.entry_id}")
     async_track_time_interval(hass, client.async_check_ping, PING_INTERVAL)
 
     return True
