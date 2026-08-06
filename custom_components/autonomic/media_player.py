@@ -11,8 +11,6 @@ from homeassistant.components.media_player import (
     RepeatMode,
     MediaType,
     async_process_play_media_url,
-
-    ATTR_TO_PROPERTY
 )
 
 from homeassistant.config_entries import ConfigEntry
